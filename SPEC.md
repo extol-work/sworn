@@ -190,7 +190,7 @@ canonical_bytes =
    || nonce                 (32 bytes)     -- per §3.4
 ```
 
-Total length: 216 bytes.
+Total length: **208 bytes** (32 × 6 = 192 for the six 32-byte fields, plus 8 × 2 = 16 for the two 8-byte fields).
 
 Implementations MUST construct this exact byte sequence and MUST NOT include additional fields, framing, prefix bytes, or version markers in the signed content. Additional metadata that an implementation wishes to include in its storage or transport layer MUST NOT enter the canonical byte sequence — otherwise cross-implementation verification breaks.
 
@@ -210,7 +210,7 @@ Every conforming implementation MUST support Ed25519 signing and verification pe
 
 - Curve: Ed25519 (edwards25519), per RFC 8032 §5.1.
 - Key encoding: 32-byte public key, 32-byte private seed, 64-byte signature.
-- Message: the 216-byte `canonical_bytes` sequence from §3.1, passed to `Ed25519.sign` without pre-hashing (i.e., PureEdDSA per RFC 8032 §5.1, not Ed25519ph).
+- Message: the 208-byte `canonical_bytes` sequence from §3.1, passed to `Ed25519.sign` without pre-hashing (i.e., PureEdDSA per RFC 8032 §5.1, not Ed25519ph).
 
 Implementations MUST use PureEdDSA. Implementations MUST NOT use Ed25519ph.
 
