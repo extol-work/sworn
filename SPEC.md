@@ -1,6 +1,8 @@
 # SWORN Specification v0.1 (Draft)
 
-**Status:** DRAFT. §1–§3 normative text; §4–§10 outline pending drafts per [ROADMAP.md](./ROADMAP.md).
+**Status:** DRAFT. Not stable. Not soliciting external review until the reference implementation exercises the text and surfaces the gaps.
+
+§1 through §3 have required text drafted from paper. §4 through §10 are section outlines pending drafts that will be written from working code, not from prose.
 
 **Notation:** The words MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are to be interpreted as described in RFC 2119.
 
