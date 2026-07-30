@@ -53,11 +53,9 @@ Deferred items are enumerated in [OPEN_QUESTIONS.md](./OPEN_QUESTIONS.md) so fut
 
 ## Provenance
 
-Authored within Extol, Inc. The reference implementation ([extol-work/sworn-postgres](https://github.com/extol-work/sworn-postgres)) ships alongside this document.
+Authored by Extol, Inc. as its first public specification. Reviewer signatures accumulate in the SWORN attestation graph itself.
 
-Reviewer credit is not pre-declared. It accrues through signed attestations to the spec, per [Attesting to the spec](#attesting-to-the-spec) below. This is deliberate: the mechanism the spec defines should produce its own record of who reviewed what, rather than a hand-curated list in a document.
-
-The intellectual lineage (the historical framework for why witnessed testimony matters, the institutions that failed to build it durably, and the design principles that shape SWORN's constraints) is developed in the Extol canon (link to be added when the canon publishes, soon).
+The reference implementation ([extol-work/sworn-postgres](https://github.com/extol-work/sworn-postgres)) ships alongside this document. The intellectual lineage (the historical framework for why witnessed testimony matters, the institutions that failed to build it durably, and the design principles that shape SWORN's constraints) is developed in the Extol canon (link to be added when the canon publishes, soon).
 
 ## Attesting to the spec
 

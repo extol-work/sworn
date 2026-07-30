@@ -1,18 +1,22 @@
 # SWORN
 
-**S**igned, **W**itnessed, **O**pen, **R**ecorded, **N**on-transferable.
+**S**igned<br>
+**W**itnessed<br>
+**O**pen<br>
+**R**ecorded<br>
+**N**on-transferable<br>
 
 A specification for portable attestations. Trust between builders, expressed as signatures readable by anyone.
 
 ## Status
 
-**v0.1 — Request for Comment.** Under review. Not yet ratified.
+**v0.1, Request for Comment.** Under review. Versions advance by accumulated attestation, not by committee vote.
 
 This is an early specification. It is deliberately incomplete in some places and deliberately opinionated in others. See [RFC.md](./RFC.md) for what we're asking reviewers to weigh in on.
 
 ## What SWORN is
 
-A specification for how one party can testify to a fact — that they observed, endorse, or corroborate something — and have that testimony be independently verifiable by anyone, without requiring the verifier to trust the platform where the testimony was originally recorded.
+A specification for how one party can testify to a fact (that they observed, endorse, or corroborate something) and have that testimony be independently verifiable by anyone, without requiring the verifier to trust the platform where the testimony was originally recorded.
 
 **Five commitments:**
 
@@ -26,23 +30,23 @@ A specification for how one party can testify to a fact — that they observed, 
 
 A ranking system. A credential registry. A blockchain. A resume. A reputation score. A voting mechanism.
 
-SWORN defines *how* testimony is captured and verified. What you build on top of that — governance, gating, weighting, display — is your implementation's business.
+SWORN defines *how* testimony is captured and verified. What you build on top of that (governance, gating, weighting, display) is your implementation's business.
 
 ## Layers
 
 | Layer | Concern | Status in v0.1 |
 |---|---|---|
-| 1 | Testimony structure and vocabulary | Normative |
-| 2 | Signing scheme and canonical bytes | Normative |
-| 3 | Signer identity and registry | Normative (single signer type) |
-| 4 | Notarization / anchor to public ledger | Normative (substrate-agnostic) |
-| 5 | Verification and disclosure endpoints | Normative |
+| 1 | Testimony structure and vocabulary | Required |
+| 2 | Signing scheme and canonical bytes | Required |
+| 3 | Signer identity and registry | Required (single signer type) |
+| 4 | Notarization, anchor to public ledger | Required (substrate-agnostic) |
+| 5 | Verification and disclosure endpoints | Required |
 
-Product mechanics — token issuance, governance weight functions, voting math, service tiers — are **out of scope** for the specification. Implementations are free to build these on top. Where an implementation converts attestation-derived standing into transferable value, the conversion function MUST be publicly documented (see §1.5, non-transferability firewall).
+Product mechanics (token issuance, governance weight functions, voting math, service tiers) are **out of scope** for the specification. Implementations are free to build these on top. Where an implementation converts attestation-derived standing into transferable value, the conversion function MUST be publicly documented (see §1.5, non-transferability firewall).
 
 ## Reference implementation
 
-[extol-work/sworn-postgres](https://github.com/extol-work/sworn-postgres) — Postgres + Ed25519. No blockchain required. Ships alongside this specification.
+[extol-work/sworn-postgres](https://github.com/extol-work/sworn-postgres). Postgres + Ed25519. No blockchain required. Ships alongside this specification.
 
 ## Contributing
 
@@ -59,4 +63,4 @@ Apache 2.0. See [LICENSE](./LICENSE).
 
 ## Provenance
 
-Authored by Extol, Inc. as its first public specification. Contributions from Umbriel (positioning), Ariel (economic firewall), Titania (implementation review), and Charon (systems architecture). Reviewer signatures accumulate in the SWORN attestation graph itself — see [RFC.md §Attesting to the spec](./RFC.md).
+Authored by Extol, Inc. as its first public specification. Reviewer signatures accumulate in the SWORN attestation graph itself. See [RFC.md §Attesting to the spec](./RFC.md#attesting-to-the-spec).
