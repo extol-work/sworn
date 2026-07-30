@@ -6,22 +6,22 @@ SWORN is under RFC review during v0.1. Contributions are welcome across several 
 
 The primary form of contribution during the RFC period. See [RFC.md §Attesting to the spec](./RFC.md#attesting-to-the-spec).
 
-If your attestation endorses the spec, disagrees with a section, or proposes an amendment, feel free to open a PR that references it so the discussion has a natural home. Do not submit textual endorsements — submit signatures.
+If your attestation endorses the spec, disagrees with a section, or proposes an amendment, feel free to open a PR that references it so the discussion has a natural home. Do not submit textual endorsements. Submit signatures.
 
 ## Proposing spec changes
 
 Open a PR against `SPEC.md` (or the relevant section file once we split it). Include:
 
 - The change you're proposing
-- The rationale — why the current text is insufficient
+- The rationale (why the current text is insufficient)
 - Which implementations you've tested the change against, if any
 - Whether the change is backwards-compatible with v0.1 as currently drafted
 
-For substantive changes (anything touching normative MUST/MUST NOT/SHOULD), also open a companion discussion in Issues so the reasoning has a durable home outside PR diff view.
+For substantive changes (anything touching required MUST/MUST NOT/SHOULD language), also open a companion discussion in Issues so the reasoning has a durable home outside PR diff view.
 
 ## Reporting spec ambiguity
 
-If you tried to implement SWORN and hit a place where the spec was ambiguous — two conforming implementations would disagree, or the spec doesn't say what to do in a specific edge case — open an issue with the `ambiguity` label. Include:
+If you tried to implement SWORN and hit a place where the spec was ambiguous, meaning two conforming implementations would disagree or the spec doesn't say what to do in a specific edge case, open an issue with the `ambiguity` label. Include:
 
 - The exact spec text that was ambiguous
 - The two (or more) interpretations you considered
@@ -45,4 +45,4 @@ Standard applies: no personal attacks, no bad-faith engagement, no vendor snipin
 
 ## Provenance and credit
 
-Contributors whose spec changes land in a normative section will be credited by public key in the CHANGELOG and, if they wish, by name in a `CONTRIBUTORS.md` file added to the repo. Attestations to the spec speak for themselves — they're already in the graph.
+Contributors whose spec changes land in a required section will be credited by public key in the CHANGELOG and, if they wish, by name in a `CONTRIBUTORS.md` file added to the repo. Attestations to the spec speak for themselves. They're already in the graph.
