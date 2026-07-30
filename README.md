@@ -54,6 +54,34 @@ Product mechanics (token issuance, governance weight functions, voting math, ser
 
 [extol-work/sworn-postgres](https://github.com/extol-work/sworn-postgres). Postgres + Ed25519. No blockchain required. Ships alongside this specification.
 
+## Prior art
+
+SWORN inherits from several traditions and improves on them in specific
+ways rather than reinventing the ground:
+
+- **W3C Verifiable Credentials** established the model of cryptographically-
+  signed claims about a subject, expressed in a portable data format.
+  SWORN's Layer 1 borrows this shape. Where VCs assume issuer authority
+  hierarchies, SWORN treats every signer as equal-standing and derives
+  weight from graph structure at read-time.
+- **Open Badges** (IMS Global) built the peer-attested credential pattern
+  at scale in education. Its lesson (that portability matters more than
+  format) shapes SWORN's substrate-agnostic Layer 4.
+- **SoulBound Tokens** and Weyl/Ohlhaver/Buterin's "Decentralized Society"
+  established non-transferability as a design constraint for reputation.
+  SWORN's Layer 1 makes this normative and adds the transparency
+  requirement for standing conversion.
+- **Solana Attestation Service (SAS)** is the notarization substrate
+  Extol uses today. Appendix A documents that binding; other bindings
+  (Postgres + SHA256, git commit hashes) are equally conformant.
+- **Elinor Ostrom's commons work** is the reasoning tradition behind
+  SWORN's disclosure discipline. Trust is a commons; readable-but-
+  unpullable records are how the commons stays governable.
+
+A longer intellectual heritage, including what shaped the specific
+design decisions, is in the Extol canon essay *What We Build On*
+(publishing soon).
+
 ## Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md). During the RFC period, we especially want:
