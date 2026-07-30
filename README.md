@@ -20,17 +20,23 @@ A specification for how one party can testify to a fact (that they observed, end
 
 **Five commitments:**
 
-1. **Signed.** Each attestation is a cryptographic signature by a persistent public key.
-2. **Witnessed.** An attestation names *who signed* and *what they attest to*. Standing lives with the persistent key.
-3. **Open.** Verification is public and requires no permissioned access.
-4. **Recorded.** The hash of the attestation payload is committed to a public ledger.
-5. **Non-transferable.** Attestations cannot be traded or wrapped in fungible tokens.
+1. **Signed -** Each attestation is a cryptographic signature by a persistent public key.
+2. **Witnessed -** An attestation names *who signed* and *what they attest to*. Standing lives with the persistent key.
+3. **Open -** Verification is public and requires no permissioned access.
+4. **Recorded -** The hash of the attestation payload is committed to a public ledger.
+5. **Non-transferable -** Attestations cannot be traded or wrapped in fungible tokens.
 
 ## What SWORN is not
 
 A ranking system. A credential registry. A blockchain. A resume. A reputation score. A voting mechanism.
 
 SWORN defines *how* testimony is captured and verified. What you build on top of that (governance, gating, weighting, display) is your implementation's business.
+
+## For reviewers
+
+- Read [RFC.md](./RFC.md) for what we're asking you to weigh in on.
+- Try [sworn-postgres](https://github.com/extol-work/sworn-postgres) to sign your first attestation in five minutes.
+- Attest to this specification at the commit hash you reviewed. That signature becomes part of the graph.
 
 ## Layers
 
