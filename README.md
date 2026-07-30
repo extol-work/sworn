@@ -20,11 +20,11 @@ A specification for how one party can testify to a fact (that they observed, end
 
 **Five commitments:**
 
-1. **Signed -** Each attestation is a cryptographic signature by a persistent public key.
-2. **Witnessed -** An attestation names *who signed* and *what they attest to*. Standing lives with the persistent key.
-3. **Open -** Verification is public and requires no permissioned access.
-4. **Recorded -** The hash of the attestation payload is committed to a public ledger.
-5. **Non-transferable -** Attestations cannot be traded or wrapped in fungible tokens.
+1. **Signed:** Each attestation is a cryptographic signature by a persistent public key.
+2. **Witnessed:** An attestation names *who signed* and *what they attest to*. Standing lives with the persistent key.
+3. **Open:** Verification is public and requires no permissioned access.
+4. **Recorded:** The hash of the attestation payload is committed to a public ledger.
+5. **Non-transferable:** Attestations cannot be traded or wrapped in fungible tokens.
 
 ## What SWORN is not
 
