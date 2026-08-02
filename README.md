@@ -95,6 +95,8 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md). During the RFC period, we especially w
 
 Apache 2.0. See [LICENSE](./LICENSE).
 
+The SWORN name and logo are trademarks of Extol, Inc. and are not covered by the Apache license. See [TRADEMARKS.md](./TRADEMARKS.md) for what you can do without asking and what requires permission.
+
 ## Provenance
 
 Authored by Extol, Inc. as its first public specification. Reviewer signatures accumulate in the SWORN attestation graph itself. See [RFC.md §Attesting to the spec](./RFC.md#attesting-to-the-spec).
