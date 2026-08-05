@@ -90,10 +90,6 @@ ways rather than reinventing the ground:
   identifiers, respectively); implementations wanting to speak fluently
   to the research community should treat them as first-class inputs.
 
-A longer intellectual heritage, including what shaped the specific
-design decisions, is in the Extol canon essay *What We Build On*
-(publishing soon).
-
 ## Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md). During the RFC period, we especially want:

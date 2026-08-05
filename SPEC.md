@@ -12,7 +12,7 @@
 
 ### §1.1 Purpose
 
-SWORN specifies how testimony — the small, corroborable claims that used to live in guilds, unions, and professional societies — can be captured cryptographically so that anyone can verify it later, from anywhere, without needing to trust the platform where it was originally recorded.
+SWORN specifies how testimony (the small, corroborable claims that used to live in guilds, unions, and professional societies) can be captured cryptographically so that anyone can verify it later, from anywhere, without needing to trust the platform where it was originally recorded.
 
 This document defines version 0.1 of the specification. It is deliberately minimal. Multi-signer role patterns, delegation, and cross-chain notarization are reserved for future versions (see [OPEN_QUESTIONS.md](./OPEN_QUESTIONS.md)).
 
@@ -20,11 +20,11 @@ This document defines version 0.1 of the specification. It is deliberately minim
 
 **Attestation.** A signed statement by one party (the *signer*) about another party or artifact (the *subject*). The statement is captured as a fixed-length hash of a payload, together with metadata that describes what class of statement is being made and when.
 
-**Signer.** The public key that produced an attestation's signature. Standing accrues to the signer, not to the person or organization that operates it. Signers are persistent — the same key over time — but the mapping between a signer and any real-world identity is implementation-defined.
+**Signer.** The public key that produced an attestation's signature. Standing accrues to the signer, not to the person or organization that operates it. Signers are persistent (the same key over time), but the mapping between a signer and any real-world identity is implementation-defined.
 
 **Subject.** The entity being attested about. May be another SWORN signer, an arbitrary public key, or a content hash. Subject semantics are activity-type-defined.
 
-**Payload.** The semantic content of the attestation — free-form structured data whose shape is determined by the activity type. The payload is NOT committed on-chain; only its hash is (§2.4, §5.1).
+**Payload.** The semantic content of the attestation. Free-form structured data whose shape is determined by the activity type. The payload is NOT committed on-chain; only its hash is (§2.4, §5.1).
 
 **Activity type.** A URI naming the class of claim being made (e.g., `work.extol.attestation/v1/contribution`, `sworn.dev/validator/v1/block-building-disclosure`). Activity types define the payload schema.
 
@@ -38,11 +38,11 @@ This document defines version 0.1 of the specification. It is deliberately minim
 
 SWORN is organized in five layers:
 
-- **Layer 1 — Testimony (§2)** — the structure of an attestation record
-- **Layer 2 — Signing (§3)** — how an attestation is bound to a signer
-- **Layer 3 — Registry (§4)** — signer identity semantics and revocation
-- **Layer 4 — Notarization (§5)** — how attestation hashes are committed to a public ledger
-- **Layer 5 — Presentation (§6)** — how third parties verify attestations
+- **Layer 1, Testimony (§2):** the structure of an attestation record
+- **Layer 2, Signing (§3):** how an attestation is bound to a signer
+- **Layer 3, Registry (§4):** signer identity semantics and revocation
+- **Layer 4, Notarization (§5):** how attestation hashes are committed to a public ledger
+- **Layer 5, Presentation (§6):** how third parties verify attestations
 
 Layers may be implemented independently, but a conforming implementation MUST implement all five. Implementations MAY use any substrate for Layer 4 (§5.1) and any presentation contract that satisfies §6's constraints.
 
@@ -65,13 +65,13 @@ Public keys are 32-byte Ed25519 encoded points. Signatures are 64 bytes. Byte co
 > - **(c)** any subjective or off-chain inputs to the function, and
 > - **(d)** the effective date of the current version.
 
-**Rationale.** Attestations derive their value from being witnessed statements, not tokens. A witness stakes their standing on the truth of a claim; if standing could be sold, the stake disappears and the claim becomes noise. The non-transferability requirement is not a philosophical preference — it is what makes the entire graph legible. The transparency requirement makes the constraint enforceable: without it, an implementation could convert standing into transferable value opaquely and preserve the letter of §1.5 while violating its spirit.
+**Rationale.** Attestations derive their value from being witnessed statements, not tokens. A witness stakes their standing on the truth of a claim; if standing could be sold, the stake disappears and the claim becomes noise. The non-transferability requirement is not a philosophical preference. It is what makes the entire graph legible. The transparency requirement makes the constraint enforceable: without it, an implementation could convert standing into transferable value opaquely and preserve the letter of §1.5 while violating its spirit.
 
 Implementations MAY produce derived signals from the attestation graph (rankings, scores, tiers, indices) and MAY exchange those signals for value, provided (a) the derivation function is documented per this section and (b) the derived signal itself is not presented as an attestation.
 
 ---
 
-## §2 Layer 1 — Testimony
+## §2 Layer 1: Testimony
 
 ### §2.1 Attestation record structure
 
@@ -97,7 +97,7 @@ An `activity_type` is a URI naming the class of claim being made. The URI MUST b
 
 - absolute (not relative);
 - resolvable, in principle, to a schema document describing the payload structure; and
-- stable — implementations MUST NOT change the meaning of an existing URI. A schema evolution requires a new URI (typically a version suffix, e.g., `.../v2/contribution`).
+- stable, meaning implementations MUST NOT change the meaning of an existing URI. A schema evolution requires a new URI (typically a version suffix, e.g., `.../v2/contribution`).
 
 Examples of well-formed activity types:
 
@@ -119,7 +119,7 @@ These reservations do not imply that any other implementation MUST support them.
 
 ### §2.3 Canonical JSON encoding for the semantic payload
 
-The payload of an attestation — the semantic content being witnessed — is a JSON object whose shape is defined by the activity type's schema. For the payload to be hashable in a deterministic, cross-implementation manner, it MUST be canonicalized before hashing.
+The payload of an attestation (the semantic content being witnessed) is a JSON object whose shape is defined by the activity type's schema. For the payload to be hashable in a deterministic, cross-implementation manner, it MUST be canonicalized before hashing.
 
 Canonicalization procedure follows RFC 8785 (JSON Canonicalization Scheme):
 
@@ -153,8 +153,8 @@ The interpretation is activity-type-defined and MUST be documented in the activi
 
 The **`witness_for`** field is always present in the canonical byte sequence (§3.1) and carries one of:
 
-- **32 zero bytes** — the attestation stands alone. The signer is making a first-order claim about the subject.
-- **a 32-byte pubkey or content hash** — the attestation endorses or witnesses a specific other party's claim.
+- **32 zero bytes:** the attestation stands alone. The signer is making a first-order claim about the subject.
+- **a 32-byte pubkey or content hash:** the attestation endorses or witnesses a specific other party's claim.
 
 `witness_for` enables a signer to say "I saw X's attestation about Y and I corroborate it," without requiring the two-layer role machinery reserved for future versions. Semantics beyond "this signer corroborates that party's claim about this subject" are activity-type-defined.
 
@@ -164,9 +164,9 @@ The **`created_at`** field is a Unix epoch timestamp in seconds (int64), represe
 
 The **`retention_hint`** field is an int64 encoding the signer's intent regarding payload storage duration:
 
-- **`retention_hint > 0`** — Unix epoch seconds after which the payload MAY be discarded by any party storing it. The hash on the ledger remains durable; the payload is not guaranteed to be retrievable after this time.
-- **`retention_hint == 0`** — no expiry intent expressed; the implementation-defined default applies.
-- **`retention_hint == -1`** — the signer intends the payload to be preserved indefinitely (subject to any implementation's storage limitations).
+- **`retention_hint > 0`:** Unix epoch seconds after which the payload MAY be discarded by any party storing it. The hash on the ledger remains durable; the payload is not guaranteed to be retrievable after this time.
+- **`retention_hint == 0`:** no expiry intent expressed; the implementation-defined default applies.
+- **`retention_hint == -1`:** the signer intends the payload to be preserved indefinitely (subject to any implementation's storage limitations).
 
 Retention is a hint, not a guarantee. Verifiers MUST NOT assume payload availability at any future time. The on-chain hash remains verifiable regardless of payload availability (§5.4).
 
@@ -174,7 +174,7 @@ Implementations MAY offer different retention hints as a service tier. If they d
 
 ---
 
-## §3 Layer 2 — Signing
+## §3 Layer 2: Signing
 
 ### §3.1 Canonical byte sequence for signing
 
@@ -194,7 +194,7 @@ canonical_bytes =
 
 Total length: **208 bytes** (32 × 6 = 192 for the six 32-byte fields, plus 8 × 2 = 16 for the two 8-byte fields).
 
-Implementations MUST construct this exact byte sequence and MUST NOT include additional fields, framing, prefix bytes, or version markers in the signed content. Additional metadata that an implementation wishes to include in its storage or transport layer MUST NOT enter the canonical byte sequence — otherwise cross-implementation verification breaks.
+Implementations MUST construct this exact byte sequence and MUST NOT include additional fields, framing, prefix bytes, or version markers in the signed content. Additional metadata that an implementation wishes to include in its storage or transport layer MUST NOT enter the canonical byte sequence, otherwise cross-implementation verification breaks.
 
 The signature is `signature = Ed25519.sign(signer_privkey, canonical_bytes)` per §3.2, or the equivalent for a registered alternative algorithm (§3.3).
 
@@ -202,7 +202,7 @@ The signature is `signature = Ed25519.sign(signer_privkey, canonical_bytes)` per
 
 1. Reconstruct `canonical_bytes` from the stored attestation.
 2. Verify `signature` against `canonical_bytes` using `signer` as the public key, per RFC 8032 §5.1.7.
-3. If step 2 succeeds, the attestation is *authentic* — the holder of the `signer` private key produced this exact byte sequence.
+3. If step 2 succeeds, the attestation is *authentic*: the holder of the `signer` private key produced this exact byte sequence.
 
 Verification per §3.1 does NOT establish that any given payload matches `data_hash`. To verify the payload as well, the verifier MUST also compute `SHA-256(canonicalize(payload)) == data_hash` per §2.3–§2.4.
 
@@ -218,7 +218,7 @@ Implementations MUST use PureEdDSA. Implementations MUST NOT use Ed25519ph.
 
 ### §3.3 Signature algorithm extension mechanism
 
-Future versions of this specification MAY register additional signature algorithms. For v0.1, only Ed25519 is defined. Any implementation that encounters an attestation whose algorithm is not Ed25519 MUST reject it as unverifiable — implementations MUST NOT pass such attestations through as verified.
+Future versions of this specification MAY register additional signature algorithms. For v0.1, only Ed25519 is defined. Any implementation that encounters an attestation whose algorithm is not Ed25519 MUST reject it as unverifiable. Implementations MUST NOT pass such attestations through as verified.
 
 Because v0.1 defines a single algorithm, no algorithm identifier appears in the canonical byte sequence. Future versions that add algorithms will introduce a prefix byte or equivalent; that will constitute a breaking change (v1.0), not a minor revision. Implementations MUST NOT invent algorithm identifier bytes on their own.
 
@@ -253,28 +253,28 @@ For v0.1, implementations SHOULD assume signer keys are long-lived. Future versi
 
 ---
 
-## §4 Layer 3 — Registry
+## §4 Layer 3: Registry
 
 ### §4.1 Signer identity model (single signer type, v0.1)
 ### §4.2 Persistent key semantics
 ### §4.3 Revocation by additive attestation
 ### §4.4 Standing as an emergent property of the graph
-### §4.5 What is NOT in this layer (roles, affiliation, delegation — reserved for future)
+### §4.5 What is NOT in this layer (roles, affiliation, delegation; reserved for future)
 
 ---
 
-## §5 Layer 4 — Notarization
+## §5 Layer 4: Notarization
 
 ### §5.1 Hash-anchor commitment (substrate-agnostic)
 ### §5.2 Merkle batching
 ### §5.3 Retention semantics (per-record, differing retention allowed)
 ### §5.4 Durability guarantees for the on-chain hash
 ### §5.5 Off-chain payload storage (implementation-defined)
-### §5.6 What is NOT in this layer (specific chain choice, PDA layouts — see appendices)
+### §5.6 What is NOT in this layer (specific chain choice, PDA layouts; see appendices)
 
 ---
 
-## §6 Layer 5 — Presentation
+## §6 Layer 5: Presentation
 
 ### §6.1 Verification endpoint contract
 ### §6.2 Two-call design (verify metadata / disclose payload with subject consent)
@@ -288,7 +288,7 @@ For v0.1, implementations SHOULD assume signer keys are long-lived. Future versi
 
 ### §7.1 Sybil resistance (bounded, not absolute)
 ### §7.2 Attack cost model
-### §7.3 Colluding attestation rings — graph-analysis detection
+### §7.3 Colluding attestation rings, graph-analysis detection
 ### §7.4 Key compromise and revocation
 ### §7.5 Payload availability vs. hash durability
 
@@ -363,21 +363,21 @@ SWORN registers the CRediT namespace so that attestations recognizing research c
 
 ---
 
-## Appendix A — Solana / SAS binding (informative)
+## Appendix A: Solana / SAS binding (informative)
 
 Extol's on-chain implementation notes. First production adopter. Not normative.
 
-## Appendix B — Postgres binding (informative)
+## Appendix B: Postgres binding (informative)
 
 Reference implementation notes. See [extol-work/sworn-postgres](https://github.com/extol-work/sworn-postgres).
 
-## Appendix C — Worked examples
+## Appendix C: Worked examples
 
 - Individual attestation (single subject, single signer)
 - Batched attestation (Merkle-root, many subjects)
 - Additive revocation
 - Cross-implementation verification (Postgres signer verified by Solana implementation)
 
-## Appendix D — Glossary
+## Appendix D: Glossary
 
-## Appendix E — Changelog
+## Appendix E: Changelog
