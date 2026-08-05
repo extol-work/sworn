@@ -77,6 +77,18 @@ ways rather than reinventing the ground:
 - **Elinor Ostrom's commons work** is the reasoning tradition behind
   SWORN's disclosure discipline. Trust is a commons; readable-but-
   unpullable records are how the commons stays governable.
+- **The Research Software Engineering (RSE) community** built its own
+  attribution infrastructure in the absence of institutional support:
+  JOSS reviews software as a publishable artifact, CITATION.cff pins
+  citation metadata to source repositories, and CRediT
+  (ANSI/NISO Z39.104-2022) provides fourteen contributor roles that
+  make it possible to credit the many kinds of work behind a research
+  output. SWORN registers the CRediT namespace directly (§9.1.1) so
+  that attestations to research contributions can share this vocabulary
+  without reinventing it. CITATION.cff files and DOIs are natural
+  subjects for SWORN attestations (as content hashes and resolvable
+  identifiers, respectively); implementations wanting to speak fluently
+  to the research community should treat them as first-class inputs.
 
 A longer intellectual heritage, including what shaped the specific
 design decisions, is in the Extol canon essay *What We Build On*
