@@ -1,0 +1,129 @@
+{
+  "spec_version": 2,
+  "spec_version_name": "v0.1-final",
+  "canonical_bytes_length": 248,
+  "signature_algorithm": "Ed25519 PureEdDSA (RFC 8032)",
+  "purpose": "Reference test vectors per SPEC §10.4. Any conforming SWORN implementation MUST reproduce expected_canonical_bytes_hex and expected_signature_hex byte-for-byte given the same input_fields and signer_secret_seed_hex.",
+  "vectors": [
+    {
+      "name": "orcid_authorship_happy_path",
+      "notes": "ORCID-sourced authorship attestation. High confidence, computed match (name-anchored against ORCID record), self-attested (subject is signer). Baseline v0.1-final case with every field non-zero.",
+      "spec_version": 2,
+      "input_fields": {
+        "signer_hex": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+        "subject_hex": "0202020202020202020202020202020202020202020202020202020202020202",
+        "activity_hash_hex": "fa98877fd71ce3a58ded325e04757be78e4c1a9dd6bdf233d9161fdfbd1bbedb",
+        "data_hash_hex": "8823e4b130074352eca15920d6551b711618d8ea0e5c9c2e82d54c0b8d50914f",
+        "witness_for_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "source_hash_hex": "1dad02f27ebc996207f39eddf23f6b298935f710a789bd50dd703642ffecd021",
+        "source_type": 2,
+        "confidence": 9500,
+        "witnessing_depth": 4,
+        "attestor_relationship": 1,
+        "signer_asserted_at": 1780000000,
+        "retention_hint": -1,
+        "nonce_hex": "0808080808080808080808080808080808080808080808080808080808080808"
+      },
+      "signer_secret_seed_hex": "0101010101010101010101010101010101010101010101010101010101010101",
+      "expected_canonical_bytes_hex": "02008a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c0202020202020202020202020202020202020202020202020202020202020202fa98877fd71ce3a58ded325e04757be78e4c1a9dd6bdf233d9161fdfbd1bbedb8823e4b130074352eca15920d6551b711618d8ea0e5c9c2e82d54c0b8d50914f00000000000000000000000000000000000000000000000000000000000000001dad02f27ebc996207f39eddf23f6b298935f710a789bd50dd703642ffecd02102001c25040100a5186a00000000ffffffffffffffff0808080808080808080808080808080808080808080808080808080808080808",
+      "expected_canonical_bytes_len": 248,
+      "expected_signature_hex": "bbc9a1a56f828996fd1ac5fbaa2694cc71b44c99f15ef9af25565ce93126c6e3b4d0ee8dbd308ee961d8eaed563db14f09943cbe6cdbb7baf11b8e6ce5f15703"
+    },
+    {
+      "name": "self_reported_sourceless",
+      "notes": "Self-reported contribution with no external source. source_hash and witness_for both 32 zero bytes. source_type = SelfReported (1), witnessing_depth = SelfAsserted (5), attestor_relationship = Self (1). Exercises the zero-source-hash requirement from spec §2.4.",
+      "spec_version": 2,
+      "input_fields": {
+        "signer_hex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394",
+        "subject_hex": "8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394",
+        "activity_hash_hex": "a1846c287c6b2e7ee5ccf9254edf8cdba6faa0eadb3dee325b8e2f18c0f43fce",
+        "data_hash_hex": "f6d9697880017989043d2fe0acc08d73411d891654ed6808b2346014613193b0",
+        "witness_for_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "source_hash_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "source_type": 1,
+        "confidence": 8000,
+        "witnessing_depth": 5,
+        "attestor_relationship": 1,
+        "signer_asserted_at": 1780000100,
+        "retention_hint": -1,
+        "nonce_hex": "1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "signer_secret_seed_hex": "0202020202020202020202020202020202020202020202020202020202020202",
+      "expected_canonical_bytes_hex": "02008139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b3948139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394a1846c287c6b2e7ee5ccf9254edf8cdba6faa0eadb3dee325b8e2f18c0f43fcef6d9697880017989043d2fe0acc08d73411d891654ed6808b2346014613193b0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100401f050164a5186a00000000ffffffffffffffff1111111111111111111111111111111111111111111111111111111111111111",
+      "expected_canonical_bytes_len": 248,
+      "expected_signature_hex": "b7296bc8600cc3f7bc6f589bb1d4b27ff2f9bda0f1cc49c7509c099ceeed8c09e4743eb283ae1c1f5bed06fbea50f24366fe4acd18c8c5452cbe86c7cd30f402"
+    },
+    {
+      "name": "peer_witnessed_physical",
+      "notes": "Peer-witnessed contribution with physical observation. source_type = PeerWitnessed (9), witnessing_depth = PhysicallyObserved (1), attestor_relationship = Peer (3). source_hash is SHA-256 of the peer's signer pubkey (a distinct 32-byte pattern in this vector).",
+      "spec_version": 2,
+      "input_fields": {
+        "signer_hex": "ed4928c628d1c2c6eae90338905995612959273a5c63f93636c14614ac8737d1",
+        "subject_hex": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "activity_hash_hex": "9f5ca22351d5f96bd639ce7e54489e5c8f234ae7cf6183ce8ea1a7728e27e175",
+        "data_hash_hex": "957d0dbc210e888638accf23df93aff47f305389af7e9086a8f88579ce76bd9e",
+        "witness_for_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "source_hash_hex": "4d12332c7f14cdaafa2b617b50feec749250000a8d75662c72c8931374176fca",
+        "source_type": 9,
+        "confidence": 10000,
+        "witnessing_depth": 1,
+        "attestor_relationship": 3,
+        "signer_asserted_at": 1780000200,
+        "retention_hint": -1,
+        "nonce_hex": "3333333333333333333333333333333333333333333333333333333333333333"
+      },
+      "signer_secret_seed_hex": "0303030303030303030303030303030303030303030303030303030303030303",
+      "expected_canonical_bytes_hex": "0200ed4928c628d1c2c6eae90338905995612959273a5c63f93636c14614ac8737d1eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee9f5ca22351d5f96bd639ce7e54489e5c8f234ae7cf6183ce8ea1a7728e27e175957d0dbc210e888638accf23df93aff47f305389af7e9086a8f88579ce76bd9e00000000000000000000000000000000000000000000000000000000000000004d12332c7f14cdaafa2b617b50feec749250000a8d75662c72c8931374176fca090010270103c8a5186a00000000ffffffffffffffff3333333333333333333333333333333333333333333333333333333333333333",
+      "expected_canonical_bytes_len": 248,
+      "expected_signature_hex": "c8a672d945c369d070755c41af821c9eabce1c9b67f891d60a8376fad658cad44812b46149906412f5aecea2db448773b4e50e58972d12332a6df5656762ec0b"
+    },
+    {
+      "name": "backfilled_migration",
+      "notes": "Backfilled attestation from a legacy v0.1-preview record. Provenance was reconstructed during migration; witnessing_depth is Unspecified (0), attestor_relationship is Unknown (0), confidence is capped low (5000 = 50%) to reflect the epistemic degradation. IMPORTANT: this is still a valid v0.1-final signature over v0.1-final bytes; the row is legitimate testimony even though its provenance is best-effort.",
+      "spec_version": 2,
+      "input_fields": {
+        "signer_hex": "ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c",
+        "subject_hex": "2222222222222222222222222222222222222222222222222222222222222222",
+        "activity_hash_hex": "cf7227ba64ad1c661271d9a3491aa76f6b9fe173d720bbd1928dd12a98e53d23",
+        "data_hash_hex": "c236ffa4dfe5c0380e0a28c06d5fa0bf7ab12a08781d22e4f81cd2e2302ee878",
+        "witness_for_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "source_hash_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "source_type": 1,
+        "confidence": 5000,
+        "witnessing_depth": 0,
+        "attestor_relationship": 0,
+        "signer_asserted_at": 1770000000,
+        "retention_hint": 7776000,
+        "nonce_hex": "4444444444444444444444444444444444444444444444444444444444444444"
+      },
+      "signer_secret_seed_hex": "0404040404040404040404040404040404040404040404040404040404040404",
+      "expected_canonical_bytes_hex": "0200ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c2222222222222222222222222222222222222222222222222222222222222222cf7227ba64ad1c661271d9a3491aa76f6b9fe173d720bbd1928dd12a98e53d23c236ffa4dfe5c0380e0a28c06d5fa0bf7ab12a08781d22e4f81cd2e2302ee87800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010088130000800e80690000000000a77600000000004444444444444444444444444444444444444444444444444444444444444444",
+      "expected_canonical_bytes_len": 248,
+      "expected_signature_hex": "227e3a9d85cda9ba838a2574fa4429a9c670a399a6d1d27b5109fd9d903021e99d45c8c97116b9b6f3dae4ea0ebfc2ea5cf12e7d8c6351aa16167951b3669703"
+    },
+    {
+      "name": "all_zero_provenance_edge_case",
+      "notes": "Edge-case attestation where source_type = Unknown (0), witnessing_depth = Unspecified (0), attestor_relationship = Unknown (0), confidence = 0. Legitimate for backfilled rows or explicit 'I decline to characterize' cases. source_hash MUST be 32 zero bytes for source_type Unknown.",
+      "spec_version": 2,
+      "input_fields": {
+        "signer_hex": "6e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf1",
+        "subject_hex": "9999999999999999999999999999999999999999999999999999999999999999",
+        "activity_hash_hex": "cf7227ba64ad1c661271d9a3491aa76f6b9fe173d720bbd1928dd12a98e53d23",
+        "data_hash_hex": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "witness_for_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "source_hash_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "source_type": 0,
+        "confidence": 0,
+        "witnessing_depth": 0,
+        "attestor_relationship": 0,
+        "signer_asserted_at": 1780000400,
+        "retention_hint": 0,
+        "nonce_hex": "5555555555555555555555555555555555555555555555555555555555555555"
+      },
+      "signer_secret_seed_hex": "0505050505050505050505050505050505050505050505050505050505050505",
+      "expected_canonical_bytes_hex": "02006e7a1cdd29b0b78fd13af4c5598feff4ef2a97166e3ca6f2e4fbfccd80505bf19999999999999999999999999999999999999999999999999999999999999999cf7227ba64ad1c661271d9a3491aa76f6b9fe173d720bbd1928dd12a98e53d2344136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000090a6186a0000000000000000000000005555555555555555555555555555555555555555555555555555555555555555",
+      "expected_canonical_bytes_len": 248,
+      "expected_signature_hex": "5246376e8d1892a4d0aa59393d8a93053f95e0910160860d137bc120186f5c22398ab03dfeaf47c7aabc977bbd800e4fd5fa3ab4fc530f692ac973d043f07e07"
+    }
+  ]
+}
