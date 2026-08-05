@@ -107,7 +107,9 @@ Examples of well-formed activity types:
 
 Namespace prefixes MAY be reverse-DNS style (`org.example.foo`) or URL-style (`https://example.org/foo`). Both are canonical URIs after Unicode NFC normalization and produce identical signing behavior (§2.4).
 
-**Extension mechanism.** Any party MAY define a new activity type by publishing a schema at the URI. There is no central registry for activity types in v0.1; a signer's willingness to use an activity type and a verifier's willingness to interpret it are the coordination mechanism. Future versions of this specification MAY define a well-known registry for widely-adopted types (§9.1).
+**Extension mechanism.** Any party MAY define a new activity type by publishing a schema at the URI. There is no central registry for activity types in v0.1; a signer's willingness to use an activity type and a verifier's willingness to interpret it are the coordination mechanism. Reserved namespaces documented in §9.1 exist to promote interoperability, not to constrain implementers.
+
+**Adopting established vocabularies.** Where an established vocabulary already exists for a domain, implementations SHOULD adopt it rather than mint a parallel namespace. Established vocabularies enable cross-implementation legibility without requiring coordination between implementers. See §9.1 for reserved namespaces, including the CRediT contributor role taxonomy (research contributions), Extol's application vocabulary (community activity), and space for W3C Verifiable Credentials and Open Badges to be registered as adopters emerge.
 
 **Extol namespace grandfathering (informative).** For continuity with the first production adopter (Extol, Inc.), the following activity types are reserved under `work.extol.attestation/v1/`:
 
@@ -304,6 +306,50 @@ For v0.1, implementations SHOULD assume signer keys are long-lived. Future versi
 ## §9 IANA-style registries (or equivalent for a young spec)
 
 ### §9.1 Activity type namespace registry
+
+This registry lists namespaces reserved for use with SWORN activity type URIs. Registration in v0.1 is descriptive, not prescriptive: an implementation is free to use any well-formed URI as an activity type (§2.2), and this section documents namespaces already in use so implementers can align without stepping on each other. A formal registration process may land in a future version.
+
+**Reserved namespaces (informative):**
+
+| Namespace prefix | Owner / source | Purpose |
+|---|---|---|
+| `work.extol.attestation/v1/` | Extol, Inc. | The first production adopter's original vocabulary (see §2.2). |
+| `sworn.dev/v1/` | The SWORN specification | Reserved for well-known types defined by future spec revisions (e.g., a `revocation` type in v0.2). |
+| `credit.niso.org/contributor-roles/` | NISO (Z39.104-2022) | CRediT (Contributor Roles Taxonomy). See §9.1.1. |
+
+Non-reserved namespaces (any URI a signer chooses to use) remain valid activity types; the registry exists so widely-shared vocabularies do not collide.
+
+#### §9.1.1 CRediT (Contributor Roles Taxonomy)
+
+CRediT (Contributor Roles Taxonomy) is a fourteen-role vocabulary developed by CASRAI and now maintained by NISO as ANSI/NISO Z39.104-2022. Its purpose is to provide transparency in contributions to scholarly published work, enabling systems of attribution, credit, and accountability that go beyond traditional authorship.
+
+SWORN registers the CRediT namespace so that attestations recognizing research contributions can share a single, widely-adopted vocabulary. Implementations SHOULD prefer CRediT roles over ad-hoc alternatives when attesting to research contributions.
+
+**URI pattern.** Each CRediT role maps to a URI under `credit.niso.org/contributor-roles/<slug>`, where `<slug>` is a lowercase kebab-case rendering of the role name.
+
+**Fourteen roles:**
+
+| Slug | Role | Definition (summary) |
+|---|---|---|
+| `conceptualization` | Conceptualization | Ideas; formulation of overarching research goals and aims. |
+| `data-curation` | Data curation | Management activities to annotate, scrub, and maintain research data. |
+| `formal-analysis` | Formal analysis | Statistical, mathematical, or computational analysis of study data. |
+| `funding-acquisition` | Funding acquisition | Acquisition of financial support for the project. |
+| `investigation` | Investigation | Conducting the research process; performing experiments or evidence collection. |
+| `methodology` | Methodology | Development or design of methodology; creation of models. |
+| `project-administration` | Project administration | Management and coordination of the research activity. |
+| `resources` | Resources | Provision of study materials, reagents, patients, samples, compute resources, etc. |
+| `software` | Software | Programming, software development, algorithm design, implementation, testing. |
+| `supervision` | Supervision | Oversight and leadership responsibility for the research activity. |
+| `validation` | Validation | Verification of the overall reproducibility of results and other experimental outputs. |
+| `visualization` | Visualization | Preparation, creation, and presentation of published work, specifically visualization. |
+| `writing-original-draft` | Writing – original draft | Preparation, creation, and presentation of published work, specifically writing the initial draft. |
+| `writing-review-editing` | Writing – review & editing | Critical review, commentary, or revision of published work. |
+
+**Degree of contribution.** CRediT allows an optional degree qualifier of `lead`, `equal`, or `supporting` when multiple contributors share the same role. Implementations expressing this SHOULD carry the degree in the attestation payload (not in the activity type URI). Example payload field: `"contribution_degree": "lead"`.
+
+**Attribution note.** SWORN reserves the `credit.niso.org/contributor-roles/` namespace for interoperability. The CRediT taxonomy itself is owned and maintained by NISO. Implementations using these URIs are consuming CRediT, not extending it.
+
 ### §9.2 Signature algorithm registry
 ### §9.3 Notarization substrate registry
 
