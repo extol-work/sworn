@@ -184,7 +184,7 @@ Five fields commit the signer's provenance claim to the canonical byte sequence:
 
 The full list of registered values for each enum is in §9.2 (source_type), §9.3 (witnessing_depth), and §9.4 (attestor_relationship). Integer positions are stable across versions (§1.4).
 
-**`source_type`** (u16) identifies the kind of source the signer relied on. Fifteen values are registered in v0.1-final, spanning self-reported claims, external authoritative sources (ORCID, DOI, git commits, OpenAlex, IRS/SEC filings, community databases like MusicBrainz), platform observations, computed assertions, and references to other SWORN attestations.
+**`source_type`** (u16) identifies the kind of source the signer relied on. Sixteen values are registered as of v0.1.1, spanning self-reported claims, external authoritative sources (ORCID, DOI, git commits, OpenAlex, IRS/SEC filings, community databases like MusicBrainz), platform observations, computed assertions, references to other SWORN attestations, and OAuth-mediated identity (GitHub, LinkedIn, Google, ORCID direct). Additions are additive and do not advance `spec_version`.
 
 **`source_hash`** (32 bytes) identifies the specific source. It is `SHA-256` of the canonical source identifier per §9.2. When `source_type` is `unknown` or `self_reported`, `source_hash` MUST be 32 zero bytes.
 
@@ -801,8 +801,26 @@ For each value, this registry specifies:
 | 12 | `regulatory_filing` | Sourced from a legally-mandated public disclosure (IRS 990, SEC filing, court record, campaign finance filing). | MUST: `SHA-256(filing_type_identifier_utf8 || filing_identifier_utf8)`. E.g., `990:EIN:12345:2024` for an IRS 990 filing, `SEC:accession_number` for an SEC filing. |
 | 13 | `community_curated_db` | Sourced from a community-edited database with revision history (MusicBrainz, Wikidata, OpenStreetMap, Discogs). | MUST: `SHA-256` of the canonical entity URL after Unicode NFC normalization (e.g., `https://musicbrainz.org/artist/<mbid>`, `https://www.wikidata.org/wiki/Q<id>`). |
 | 14 | `external_sworn_attestation` | References another SWORN attestation (federation, cross-implementation graph). | MUST: `SHA-256` of the referenced attestation's canonical byte sequence, as computed per §3.1 of the version that attestation was signed under. Equivalent to the referenced attestation's stable identifier. |
+| 15 | `oauth_authenticated` | The signer's identity was verified by a third-party OAuth provider (GitHub, LinkedIn, Google, ORCID direct, etc.) at attestation time. The identity provider verified control of an account, not the human identity of its owner. See §9.2.1 below for provider identifier conventions. | MUST: `SHA-256("oauth:" \|\| provider_name_utf8 \|\| ":" \|\| provider_user_id_utf8)`. `provider_name` is the registered short name (see §9.2.1); `provider_user_id` is the provider's stable user identifier (e.g., GitHub numeric user ID, not username). |
 
 **Enum evolution.** Additions to this registry (new integer positions) are additive and do NOT advance `spec_version`. Verifiers that encounter a `source_type` value they do not recognize MUST report a version-mismatch condition (distinct from malformed-attestation) so upstream tooling can distinguish "reader is behind" from "attestation is corrupt." Verifiers MUST NOT interpret unknown source_type values as `unknown` (0); the enum is exhaustive at each version.
+
+#### §9.2.1 OAuth provider names (registered)
+
+`source_type = 15` (`oauth_authenticated`) requires a registered `provider_name` short string. Cross-implementation source-identity matching depends on all implementations spelling the same provider name identically.
+
+| provider_name | Provider | provider_user_id semantics |
+|---|---|---|
+| `github` | GitHub | Numeric user ID (e.g., `12345678`), NOT username. Usernames change; numeric IDs are stable. |
+| `linkedin` | LinkedIn | LinkedIn member ID (stable numeric identifier from the OAuth response). |
+| `google` | Google | `sub` claim from the OAuth ID token (Google's stable per-app user identifier). |
+| `orcid` | ORCID | 19-character ORCID identifier in upper-hyphen form (e.g., `0000-0002-1825-0097`). Distinct from `source_type = 2` (`orcid`): `source_type = 15` with `provider_name = orcid` means "authenticated via ORCID's OAuth flow at attestation time"; `source_type = 2` means "the underlying data came from an ORCID record, provenance-only, no auth event." |
+
+New providers register additively via the same enum-evolution rule as §9.2. Provider name choice: prefer short lowercase strings matching the provider's own canonical short name; avoid `oauth_` prefix (already implied by the source_type).
+
+**Confidence guidance (non-normative).** OAuth-mediated attestation verifies control of a third-party account, not human identity of its owner. Implementations SHOULD choose `confidence` values that reflect this. `10000` (100%) is inappropriate for any OAuth path because the underlying provider does not verify humanness. A reasonable floor across all OAuth providers is `7000-8000` (70-80%); providers with stronger identity verification workflows (e.g., verified organizational accounts, KYC-linked providers) MAY choose higher values with documented rationale per §1.5.
+
+**Rationale for a generic `oauth_authenticated` slot.** OAuth-mediated identity is a recurring pattern with a common shape: a third-party provider mediates the login, the signer's identity in the attestation is tied to their account with that provider. Rather than proliferating per-provider source_type values (`github_oauth`, `linkedin_oauth`, `google_oauth`, and so on ad infinitum), the registry keeps a single slot and encodes the provider context in the payload. This preserves cross-implementation legibility (one slot to reason about) while letting implementations add new OAuth providers via the §9.2.1 registry without spec bumps.
 
 ### §9.3 witnessing_depth registry
 
@@ -1024,6 +1042,8 @@ Terms defined normatively elsewhere in the specification are cross-referenced ba
 **Witnessing depth.** A registered u8 enum (§9.3) capturing the epistemic depth of the witnessing act itself. Orthogonal to source type. See §2.5.
 
 ## Appendix E: Changelog
+
+**v0.1.1** (2026-08-06, additive): registered `oauth_authenticated` (source_type = 15) in §9.2 with the §9.2.1 OAuth provider names sub-registry (`github`, `linkedin`, `google`, `orcid`). Canonical byte layout unchanged; no signature-compatibility break; existing v0.1-final vectors and signatures remain valid without re-issuance. Additive registry evolution per §9.2's "Enum evolution" rule.
 
 **v0.1-final** (this document): added `spec_version`, `source_hash`, `source_type`, `confidence`, `witnessing_depth`, `attestor_relationship` to canonical bytes. Extended canonical byte length from 208 to 248. Added §9.2, §9.3, §9.4 registries. Added §2.5 (provenance fields), §2.5.1 (signer's claim not verifier's guarantee), §2.5.2 (dedup semantics), §2.8 (source license and off-chain metadata), §10.4 (reference test vectors). Added the "sourceable" property to §1.1.
 
