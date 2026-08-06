@@ -843,9 +843,80 @@ Substrate choice is implementation-defined; interoperability of hash-anchor comm
 
 ## §10 Conformance
 
+Conformance to SWORN v0.1-final is defined by what an implementation can produce, consume, and refuse. This section spells out three levels of conformance (§10.1), the interoperability tests every level MUST pass (§10.2), the current state of the registration process (§10.3), and the reference test vectors that anchor cross-implementation verification (§10.4).
+
 ### §10.1 Conformance levels
+
+An implementation MAY conform to SWORN v0.1-final at one of three levels. Each higher level entails all lower levels.
+
+**Level 1: Verifier.** An implementation that can consume, validate, and reason about attestations produced by any other conforming implementation. A verifier MUST:
+
+- Reconstruct the 248-byte canonical byte sequence (§3.1) from a stored attestation's fields.
+- Verify Ed25519 signatures per §3.2 (PureEdDSA, no pre-hashing).
+- Recompute `SHA-256(canonicalize(payload)) == data_hash` per §2.3 and §2.4 when a payload is present.
+- Recompute `SHA-256(canonical source identifier)` per §9.2's per-source-type canonicalization when checking source integrity.
+- Recompute `SHA-256(target_canonical_bytes)` when interpreting revocation references per §4.3.
+- Reject attestations whose `spec_version` marker (§3.1) is unknown to the implementation, distinguishing that failure from signature invalidity per §9.2's fail-closed rule.
+- Refuse enumeration and bulk-retrieval operations at any Layer 5 endpoint per §6.4.
+
+A verifier implementation MAY be embedded in a browser, a library, a command-line tool, or a service; the deployment shape is not constrained.
+
+**Level 2: Signer.** A verifier that also produces new attestations. A signer MUST additionally:
+
+- Construct canonical byte sequences that pass byte-for-byte verification against §10.4's reference vectors.
+- Generate cryptographically-secure nonces per §3.4.
+- Self-verify its own signatures before publishing them, catching client-side signing bugs before they propagate.
+- Populate provenance fields per §2.5, including the zero-hash rule for sourceless `source_type` values (§2.4) and the range and enum constraints (§9.2 through §9.4).
+- Honor §1.5's non-transferability firewall for any product surface derived from the signer's attestations.
+
+**Level 3: Notarizer.** A signer that also anchors attestations to a public substrate per Layer 4. A notarizer MUST additionally:
+
+- Publish `data_hash`, `signer` (or a resolvable identifier for the signer), and monotonic timestamp per §5.1.
+- Independently recompute `attestation_hash = SHA-256(canonical_bytes)` before anchoring, rather than trusting an upstream implementation's hash.
+- Guarantee the anchored hash's durability per §5.4 (no mutation, revocation, or reversal at the substrate layer).
+- Provide a Layer 5 verification endpoint that lets external callers independently recompute the hash and compare to the anchored record.
+
+An implementation MAY declare conformance at Level 1 (verifier), Level 1+2 (signer), or Level 1+2+3 (notarizer). Declarations at levels below the implementation's actual capability are acceptable and useful; an implementation that can sign but chooses to expose only verification is a valid Level 1 declaration. Declarations above the implementation's actual capability are non-conforming.
+
 ### §10.2 Interoperability tests
+
+An implementation is interoperable with SWORN v0.1-final when it passes all applicable tests below. Applicability follows the level declared per §10.1.
+
+**T-1 (Verifier, required).** Given each vector in `fixtures/attestations/v0.1-final/vectors.json`, the implementation MUST reconstruct `expected_canonical_bytes_hex` byte-for-byte from `input_fields` and MUST verify `expected_signature_hex` against the reconstructed bytes using `signer_secret_seed_hex`'s corresponding public key.
+
+**T-2 (Verifier, required).** Given a tampered attestation (any single byte of the canonical byte sequence altered post-signing), the implementation MUST report signature verification failure.
+
+**T-3 (Verifier, required).** Given a valid attestation whose payload has been altered (data_hash still committed to the original payload), the implementation MUST distinguish signature validity (holds) from payload integrity (fails).
+
+**T-4 (Verifier, required).** Given a request to enumerate attestations by signer, subject, or arbitrary attribute, the implementation MUST refuse the request per §6.4. The refusal MUST be an explicit error, not a silent unsupported-feature response.
+
+**T-5 (Signer, required).** For every reference vector, the implementation MUST produce byte-identical canonical bytes and byte-identical signatures when given the same `input_fields` and `signer_secret_seed_hex`. This is the property that makes the reference vectors testable across implementations.
+
+**T-6 (Signer, required).** An attempt to sign with a `source_type` value of `unknown` (0) or `self_reported` (1) combined with a nonzero `source_hash` MUST fail before signing. See §2.4.
+
+**T-7 (Signer, required).** An attempt to sign with a `confidence` value greater than 10000 basis points, a `source_type` value outside the §9.2 registry, a `witnessing_depth` outside §9.3, or an `attestor_relationship` outside §9.4 MUST fail before signing.
+
+**T-8 (Notarizer, required).** Given an attestation from a different conforming implementation, the notarizer MUST independently recompute `attestation_hash = SHA-256(canonical_bytes)` from the source fields, MUST NOT trust an upstream implementation's precomputed hash, and MUST anchor the recomputed value.
+
+**T-9 (Notarizer, required).** The notarizer's substrate MUST NOT expose a path to mutate, revoke, or reverse an anchored hash. If the underlying substrate provides such a path (e.g., a hypothetical rent-reclamation or unpublish instruction), the notarizer MUST NOT call it for SWORN-anchored records.
+
+Additional tests MAY be added by implementations that surface novel edge cases; those tests SHOULD be contributed back to the reference test-vector set (§10.4) so other implementations can benefit.
+
 ### §10.3 Registration process (or self-declaration during RFC period)
+
+During the RFC period, conformance is self-declared. An implementation that passes the applicable §10.2 tests MAY declare itself conforming to SWORN v0.1-final at the appropriate level. No central authority reviews or approves conformance declarations at this stage; the mechanism the specification defines (attestations, verifiable by any party against the reference vectors) is expected to sort correct declarations from incorrect ones over time.
+
+An implementer wishing to publish a conformance declaration SHOULD:
+
+- Name the implementation and its version.
+- Declare the conformance level per §10.1.
+- Reference the specific SWORN version (e.g., v0.1-final at commit hash X).
+- Publish the results of the applicable §10.2 tests, ideally as a reproducible test-suite invocation.
+- Sign the declaration itself as a SWORN attestation, with the implementation's project or maintainer identity as the signer.
+
+Signing the declaration is not required for conformance, but it is the pattern the specification recommends: an implementation that claims to implement SWORN can prove that claim by using the mechanism SWORN defines.
+
+A formal registration process, including a conformance mark and a public conformance registry, is reserved for a future specification version. The mark and the registry are properties of the specification's steward, not of any individual implementation.
 
 ### §10.4 Reference test vectors
 
