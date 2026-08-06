@@ -362,11 +362,63 @@ For v0.1, implementations SHOULD assume signer keys are long-lived. Future versi
 
 ## §4 Layer 3: Registry
 
+Layer 3 defines what a signer is, how signer identity persists over time, how signers withdraw prior statements, and how the accumulated graph of attestations is interpreted as standing. It deliberately does not define roles, affiliations, delegation, or any hierarchy above the single-signer type; those are reserved for future versions (§4.5).
+
 ### §4.1 Signer identity model (single signer type, v0.1)
+
+A signer is a single Ed25519 public key. There is no registration step, no directory service, no central issuer, and no distinction between signer classes at the protocol layer. Any party that holds an Ed25519 private key can produce a conforming SWORN attestation; the resulting `signer` field in the canonical byte sequence (§3.1) is that private key's corresponding 32-byte public key.
+
+Implementations MUST NOT require signer pre-registration as a condition of accepting an attestation. Rate limiting, quota enforcement, and admission control at the transport layer (§6.5) are separate concerns and MUST NOT be conflated with signer identity.
+
+The identity of a signer is exactly its public key. The mapping between a signer and any real-world person, organization, or automated system is implementation-defined and lives outside the protocol. Implementations that wish to associate signers with human-readable labels, verified identities, or organizational affiliations MAY do so in an off-chain metadata layer, subject to the transparency requirement of §1.5 where such labels are used to convert standing into value.
+
 ### §4.2 Persistent key semantics
+
+Signer identity persists exactly as long as the signer's private key persists. Two attestations bearing the same `signer` value are, at the protocol layer, produced by the same signer regardless of when they were signed or by what implementation. This is the primitive that makes standing accumulate across time and across implementations.
+
+Implementations MUST NOT treat the same `signer` public key as two distinct signers under any circumstance. Implementations MAY offer signers a mechanism to label themselves (display names, avatars, affiliations) but MUST NOT let such labels override the cryptographic identity of the key.
+
+Signers MAY hold multiple distinct keys and use them in different contexts (per-community keys, per-purpose keys, disposable keys). Each key is a distinct signer at the protocol layer. Implementations MAY offer off-chain grouping ("these keys belong to the same real-world entity") but the protocol makes no such grouping.
+
+For v0.1, implementations SHOULD assume signer keys are long-lived. Formal key rotation semantics are reserved for future versions (§3.5). A signer that rotates keys today does so by starting a fresh signer identity; prior attestations under the old key remain valid but no longer accumulate standing to the new key.
+
 ### §4.3 Revocation by additive attestation
+
+SWORN has no on-chain mutation of prior attestations. Revocation is expressed by signing a new attestation that references the target.
+
+**Required convention.** An attestation whose `activity_type` URI resolves to a revocation-class schema (for example, `sworn.dev/v1/revocation`) and whose `subject` field carries the 32-byte hash-or-identifier of the target attestation constitutes a revocation of the referenced attestation by the signing party.
+
+Implementations MUST NOT delete, mutate, or otherwise alter the target attestation's record in response to a revocation. Both records remain durable. Verifiers walking the graph MUST see both the original attestation and any revocations of it, and MAY apply reader-side policy about how to weigh them.
+
+**Who can revoke.** Only the original signer of an attestation can revoke it in a way that discounts its standing at the reader's discretion. A revocation signed by a party other than the original signer is a first-class attestation in its own right (a "dispute" or "counter-claim") but is not a revocation of the target attestation's cryptographic validity. The original signature over the target's canonical bytes remains cryptographically valid regardless.
+
+**Additive-only rule.** Implementations MUST treat every revocation as an additive record in the notarization substrate. Implementations MUST NOT provide a "hard delete" or "unpublish" path at Layer 4 (§5.4). This is what makes SWORN's revocation semantics honest: a revocation is a fact about the signer's later intent, not an erasure of prior fact.
+
+**Interaction with key rotation.** Because v0.1 has no formal key rotation (§3.5), revocation requires the original signing key. If a signer has lost access to the key that produced an attestation, that attestation cannot be revoked in the v0.1 sense. The signer MAY sign a new attestation under a new key stating "I have lost control of key X and no longer stand behind attestations signed by it"; such a statement is a first-class attestation but does not carry the same weight as a same-key revocation. Formal key-compromise semantics are reserved for future versions.
+
 ### §4.4 Standing as an emergent property of the graph
+
+Standing is the accumulated record of attestations signed by, and attestations naming, a given signer. Standing is not a score, a ranking, or a value. Standing is a graph.
+
+**Required semantics.** Implementations MUST expose sufficient primitives at Layer 5 (§6) for a verifier to walk the graph and reason about a signer's attestation history. Implementations MUST NOT present derived signals (rankings, tier assignments, aggregate scores) as attestations. The distinction between the attestation graph (facts anyone can independently verify) and derived signals (interpretations one implementation has chosen to compute) is required by §1.5.
+
+**Implementation freedom.** Given the same underlying graph, two implementations MAY compute different derived signals for legitimate reasons: different thresholds for weighting peer-witnessed vs computed-match attestations (§9.3), different treatment of low-`confidence` self-reports (§2.5.1), different decay curves for older attestations. This is expected and healthy. What implementations MUST NOT do is present these interpretations as if they were themselves signed attestations.
+
+**Cross-implementation portability.** Because Layer 1 (§2) fully specifies the canonical byte sequence and Layer 2 (§3) fully specifies signature semantics, any two implementations that produce or consume attestations do so against the same graph. A signer's standing, measured as raw attestation counts and relationships, is identical across implementations. Derived signals differ; the graph does not.
+
+**Emergent revocation.** Standing loss from revocation is not a spec-level mechanism. A revocation attestation (§4.3) is a fact in the graph; how much it decreases the referenced attestation's contribution to standing is a reader-side policy decision. Implementations SHOULD document their revocation-weighting policy per §1.5 where standing is converted into value.
+
 ### §4.5 What is NOT in this layer (roles, affiliation, delegation; reserved for future)
+
+The following patterns exist in real recognition systems, are named here for completeness, and are explicitly out of scope for v0.1:
+
+- **Two-layer witness/certifier roles.** A pattern where an entity (organization) endorses a persona (individual signer) and can sign entity-binding statements distinct from persona-signed statements. Requires role primitives Layer 3 v0.1 deliberately omits. Reserved for a future companion specification.
+- **Affiliation.** A signed relationship of membership between a persona and an entity, with revocation semantics distinct from attestation revocation. Requires the roles model above.
+- **Delegated attestation.** A pattern where signer A grants signer B the authority to sign on A's behalf, with revocable grant semantics. Materially expands the trust model and requires its own spec pass. Reserved for a future version.
+- **Multi-signature attestations.** An attestation requiring N-of-M signatures before it becomes valid. Distinct from independent attestations by multiple signers about the same subject (which v0.1 already supports natively via §2.5.2). Reserved for a future version.
+- **Directory or discovery services.** No spec-level mechanism for looking up a signer by name, resolving a signer to a real-world identity, or discovering signers by attribute. Implementations MAY offer such services off-chain; the protocol makes no commitment.
+
+Implementations MAY build any of these on top of v0.1's single-signer-type primitive, as application conventions in their own right. Where they do, those conventions live in implementation documentation, not in this specification.
 
 ---
 
