@@ -581,11 +581,73 @@ Implementations MUST offer rate limiting on the verification and disclosure inte
 
 ## §7 Security considerations
 
+SWORN's security posture is deliberately narrow. The protocol establishes that a specific signer produced a specific statement over specific canonical bytes, and that the statement was anchored in a public durable ledger at a specific time. Everything else is either reader-side interpretation (§4.4) or out of scope. Implementations MUST NOT present derived signals as security guarantees they are not.
+
+The considerations below are the security surface SWORN is responsible for, and where its guarantees end.
+
 ### §7.1 Sybil resistance (bounded, not absolute)
+
+SWORN provides no protocol-level mechanism to prevent one real-world party from operating multiple signer keys. Any Ed25519 keypair produces conforming attestations; the graph does not distinguish "one person with five keys" from "five people with one key each."
+
+**What SWORN provides.** The graph is public. A colluding cluster of keys signing back-and-forth attestations to each other is legible as such at the graph-analysis layer: the density of mutual attestation, the absence of external corroboration, and the timing correlation between keys are all detectable properties for a verifier willing to compute them. The `witnessing_depth` (§2.5, §9.3) and `attestor_relationship` (§2.5, §9.4) fields commit the signer's own claim about the epistemic depth of the witnessing act, making low-depth self-report clusters explicit rather than hidden.
+
+**What SWORN does NOT provide.** Real-world identity verification, biometric uniqueness, proof-of-personhood, KYC, or any protocol-level "one person one signer" property. Implementations that need such properties MUST layer them above SWORN as application-layer concerns, subject to §1.5's transparency requirement wherever the layered property is exchanged for value.
+
+**Non-normative guidance.** Graph-analysis heuristics for detecting probable Sybil clusters are an active area of research and implementation choice; SWORN's contribution is that the raw graph is available for such analysis in a substrate-neutral form. Implementations SHOULD document the Sybil-resistance heuristics they apply when deriving signals from the graph, per §1.5.
+
 ### §7.2 Attack cost model
-### §7.3 Colluding attestation rings, graph-analysis detection
+
+The economically relevant properties of a SWORN attestation are:
+
+- **Signing an attestation costs the signer nothing beyond compute** (an Ed25519 signature). SWORN does NOT rely on signing costs for security.
+- **Anchoring an attestation costs whatever the substrate charges** (§5.1); this is substrate-dependent and MAY be zero, MAY be small (Solana SAS transaction fees), or MAY be significant.
+- **Reversing an anchored attestation is infeasible** at the protocol layer (§5.4). The signer can add a revocation (§4.3) but cannot unpublish the original.
+
+**Consequence for adversaries.** Fabricating a valid attestation requires the signing key. Fabricating a graph of mutually-corroborating attestations at scale requires either many colluding keyholders or many keys under a single controller (§7.1). Cost per fabricated attestation is dominated by substrate fees plus the coordination cost of the Sybil operation itself.
+
+**Consequence for readers.** The absence of a signature is definitive: no valid attestation existed without a signature. The presence of a signature is definitive as to authorship: only the holder of the signing key produced this specific 248-byte canonical sequence. Neither the presence nor absence of a signature is definitive as to truth of the underlying claim. Reader-side interpretation is required.
+
+### §7.3 Colluding attestation rings and graph-analysis detection
+
+A colluding ring is a set of keys whose attestations mutually corroborate at high volume without external corroboration. SWORN treats such rings as first-class members of the graph: their attestations are cryptographically valid, they cannot be prevented, and they are legible via graph analysis.
+
+**Detection primitives that the graph exposes:**
+
+- **Density.** A cluster of N keys with roughly N² mutual attestations and few outbound attestations to signers outside the cluster.
+- **Timing correlation.** Attestations signed within tight time windows across a cluster suggest coordinated action.
+- **Provenance homogeneity.** A cluster whose attestations are all `self_reported` or `computed`, with no `peer_witnessed` or `physically_observed` depth, and no `orcid` / `git_commit` / `regulatory_filing` source types, is legible as low-external-anchoring.
+- **Isolation.** A cluster whose members appear in no other communities' graphs is more concerning than a cluster whose members are broadly connected.
+
+**What SWORN requires.** Nothing about ring detection at the protocol level. The graph is available; interpretation is reader-side. Implementations that derive standing signals SHOULD document their ring-detection heuristics per §1.5.
+
+**What SWORN prevents.** SWORN cannot prevent ring formation. What it does is prevent rings from being hidden: because the graph is public and substrate-anchored (§5.1, §5.4), any verifier can compute the density, correlation, and provenance-homogeneity metrics above without asking the ring for permission.
+
 ### §7.4 Key compromise and revocation
+
+If a signer's private key is compromised, an attacker can produce arbitrary attestations under that signer's identity. SWORN v0.1 provides no protocol-level compromise-declaration mechanism.
+
+**Signer-side response.** A signer who suspects key compromise MAY sign a revocation (§4.3) of any specific attestation they believe the attacker produced. This requires the compromised key itself (which the signer presumably still holds unless the attacker has exclusive control). Where the signer no longer holds the key, they MAY sign an attestation under a new key stating "key X is compromised as of time T; treat attestations by X after T with suspicion"; such statements are first-class attestations but are not protocol-level revocations of the compromised key.
+
+**Reader-side response.** Verifiers MAY apply reader-side policy to discount or ignore attestations from signers who have publicly declared key compromise, provided the discounting policy is documented per §1.5.
+
+**Not provided by v0.1.** Formal compromise attestation with a claimed compromise timestamp, key-rotation semantics that transfer standing from old to new key, and centralized revocation lists are all reserved for a future version. Implementations that need these properties today MUST build them at the application layer with documented semantics.
+
+**Attacker mitigation posture.** Because §5.4 requires substrate hashes to be irreversible, attestations produced by a compromised key BEFORE the compromise cannot be retroactively invalidated by the compromise. This is a feature: legitimate historical attestations remain legible. It is also a burden: a compromised key's attestations after compromise are indistinguishable at the signature layer from the signer's own attestations. Reader-side timestamp comparison against a claimed-compromise time is the mitigation.
+
 ### §7.5 Payload availability vs. hash durability
+
+The on-chain hash and the off-chain payload have different durability guarantees. The hash lives as long as the substrate's record (§5.4); the payload lives as long as some party chooses to preserve it, subject to the `retention_hint` (§2.7).
+
+**Security implication.** A verifier presented with an attestation whose payload is no longer retrievable can still confirm:
+
+- The signer produced a specific 248-byte canonical sequence (Ed25519 verify per §3.2).
+- The `data_hash` in that sequence was published to the substrate at a specific time (§5.1, §5.4).
+
+The verifier cannot confirm what payload the `data_hash` covered without recovering the payload from some retention source. This is by design: `retention_hint` is what makes SWORN GDPR-viable (§8.3). It is also a real property callers must handle: an attestation whose signature verifies but whose payload cannot be retrieved is "authentic but no longer legible."
+
+**Not a validity issue.** Payload unavailability MUST NOT be treated as signature failure. The attestation remains valid at the signature and anchor layers regardless of whether the payload can be recovered. Implementations MUST distinguish "signature invalid" (a hard failure) from "payload unavailable" (a soft condition that limits what the verifier can conclude but does not invalidate the attestation).
+
+**Adversarial retention scenario.** An adversary who controls the only party retaining a payload could withhold it to prevent verification of the payload's content. SWORN v0.1 provides no protocol-level defense against this beyond the retention hint's signaling. Implementations that need durable payload availability MUST ensure the payload is retained by multiple independent parties (the signer themselves, the subject, mirrored storage) or use a substrate that stores payloads on-chain (accepting the cost per §5.5).
 
 ---
 
