@@ -505,11 +505,77 @@ Implementations that wish to add substrate-specific behavior (batched anchoring,
 
 ## §6 Layer 5: Presentation
 
+Layer 5 defines how third parties interact with attestations after Layer 4 has anchored them. Its central discipline is *shown, not pulled*: a conforming implementation MUST enable verification of attestations a caller already knows about, and MUST NOT enable enumeration, discovery, or bulk export of attestations by properties of their subjects or signers. This is the property that keeps the SWORN graph from becoming a surveillance database while preserving its utility as verifiable testimony.
+
 ### §6.1 Verification endpoint contract
-### §6.2 Two-call design (verify metadata / disclose payload with subject consent)
+
+A conforming implementation MUST expose a verification interface that, given an attestation identifier known to the caller, returns:
+
+- the full canonical bytes of the attestation (or the primitive fields sufficient for the caller to reconstruct them per §3.1),
+- the signature (64 bytes, per §3.2),
+- the `activity_type` URI (from which `activity_hash` is derived per §2.4),
+- the substrate-published `attestation_hash` (per §5.1) sufficient for the caller to confirm anchoring against the notarization substrate,
+- and the metadata required to interpret provenance fields (per §2.5).
+
+The verification interface MUST NOT return the payload as part of this call. Payload disclosure is a distinct operation per §6.2.
+
+Implementations MAY offer the verification interface over any transport (HTTP, gRPC, CLI, a substrate query directly, an in-process library call). SWORN v0.1 does not mandate a specific transport, but the reference implementation exposes it as HTTP+JSON at `GET /attestations/{id}` for metadata and `GET /verify/{id}` for a server-computed valid/invalid answer (see Appendix B and [extol-work/sworn-postgres](https://github.com/extol-work/sworn-postgres)'s `openapi.yaml`).
+
+**Independent verification requirement.** Regardless of transport, a caller receiving the verification-endpoint response MUST be able to independently reconstruct the canonical bytes, recompute `SHA-256(canonical_bytes)` and confirm it matches the substrate-published `attestation_hash`, and verify the Ed25519 signature. An implementation whose response cannot be independently verified in this way is NOT conforming, even if it returns a valid-looking status. The trust primitive is the caller's own recomputation, not the endpoint's assertion.
+
+### §6.2 Two-call design (verify metadata, disclose payload with subject consent)
+
+Verification and payload disclosure are separate operations. Verification (§6.1) reveals who signed what class of claim about which subject, plus the hash commitment to the payload's content. Disclosure reveals the payload itself.
+
+**Required separation.** Implementations MUST NOT return payload content from the verification interface. Implementations MUST require an explicit disclosure authorization (per §6.3) before returning payload bytes.
+
+**Rationale.** A verifier who wants to know "did signer X make a claim of type Y about subject Z at time T" can answer that question from the verification interface alone, without seeing the specific content of the claim. Many use cases (aggregate counts, standing-graph traversal, temporal analysis, dispute resolution about who signed what) require only the metadata. Payload content is often more sensitive than the fact of the attestation and should require a separate, signer-authorized step to retrieve.
+
+**Payload authenticity check on disclosure.** When an implementation returns a payload via a disclosure call, the caller MUST be able to compute `SHA-256(canonicalize(payload))` and confirm equality with the `data_hash` in the verified canonical bytes. A disclosed payload whose recomputed hash does not match `data_hash` MUST be rejected by the caller as tampered or misdelivered, even if the disclosure token was valid. The signature over `data_hash` is the payload's authenticity guarantee; the disclosure channel is a delivery mechanism, not a trust primitive.
+
 ### §6.3 Disclosure token semantics
+
+A disclosure token authorizes exactly one retrieval of one attestation's payload. The token binds three properties: the specific attestation (by ID or hash), a time window during which the token is redeemable, and a single-use consumption guarantee.
+
+**Required properties.**
+
+- **Single-use by default.** A conforming implementation MUST redeem each disclosure token at most once. A second redemption attempt MUST fail (the reference implementation returns HTTP 410 Gone with an explanatory body). Implementations MAY offer explicitly-designated multi-use tokens as a separate token type; where they do, the multi-use property MUST be visible in the token's metadata so a caller can distinguish.
+- **Time-bounded.** Every token has an expiration. Implementations MUST reject expired tokens with a distinct error class from single-use exhaustion (so callers can distinguish "you already used this" from "this window has closed"). SWORN v0.1 recommends a minimum floor of 60 seconds and a maximum ceiling of 7 days for single-use tokens; implementations MAY tune within that range.
+- **Signer-authorized.** A disclosure token MUST be issued by proof of control of the attestation's signing key or by a mechanism the signer has explicitly authorized. Implementations MUST NOT permit unauthenticated parties to mint disclosure tokens for arbitrary attestations. The reference implementation binds token issuance to an Ed25519 signature by the attestation's signer over a domain-separated issuance message; other equivalent mechanisms (session-authenticated UI approval by the signer, delegated authorization within a signer-controlled application, cryptographic capability tokens) are acceptable provided the signer's authorization is present at issuance time.
+- **Domain-separated.** The bytes signed to authorize token issuance MUST NOT be substitutable for the canonical byte sequence of any attestation (§3.1) or the canonical form of any other SWORN operation. The reference implementation prefixes issuance bytes with the literal string `sworn-disclosure-token-v1`; other implementations MUST use an equivalent domain separator that cannot collide with attestation canonical bytes.
+
+**Non-normative guidance on UX.** The disclosure token is protocol plumbing. How it reaches the requester (URL, QR code, in-app deep link, approval prompt, capability delegation) is an application-layer decision. The single-use default should not be interpreted as requiring the token itself to be human-visible; well-designed implementations often hide the token entirely behind a "requester asks, signer approves in-app, payload delivered" flow.
+
 ### §6.4 Refused operations (list-by-subject, bulk export, name search)
+
+A conforming implementation MUST NOT expose operations that enumerate attestations by properties of their subjects, signers, or payloads. Specifically, the following operations MUST be refused (returned as errors, not silently unsupported):
+
+- **List by subject.** A query returning all attestations naming a given subject.
+- **List by signer.** A query returning all attestations produced by a given signer.
+- **Bulk export.** A query returning attestations without a specific caller-supplied identifier.
+- **Name or attribute search.** A query returning attestations whose payload content matches a search pattern.
+- **Signer discovery.** A query returning signers matching a real-world identity, label, or attribute.
+
+Implementations MUST return an explicit refusal (the reference implementation uses HTTP 400 with an error body identifying the operation as refused by design) rather than treating these as absent features. The refusal is a first-class part of the presentation contract: an implementer testing conformance MUST observe the refusal to confirm the discipline is enforced.
+
+**Rationale.** SWORN's design commitment is that the attestation graph is *verifiable* without being *enumerable*. A verifier holding an attestation identifier (however obtained) can confirm its authenticity; a party who does not hold an identifier cannot bulk-discover the graph's contents. This is what prevents SWORN from becoming a portable dossier system. The discipline is enforced at Layer 5 because it is the layer where callers meet the system; a substrate that stores attestations without a Layer 5 wrapper (a raw Solana PDA scan, for example) has bypassed the discipline, and any implementation exposing such a raw view to callers is NOT conforming as a SWORN Layer 5 presentation surface.
+
+**Signer-scoped exceptions.** A signer authenticated to their own key MAY retrieve a list of their own attestations from an implementation that stores them; this is a self-service reflection, not enumeration by third parties. Implementations offering this MUST authenticate the request as coming from the signer's key (via signature, session tied to the key, or equivalent).
+
+**Application-scoped exceptions.** An implementation MAY expose enumeration within a bounded application context (for example, all attestations attached to a specific event, group, or resource the caller has independent access to) provided the enumeration is scoped by an application-layer resource identifier the caller must possess. Enumeration by properties of the attestation's signer or subject remains refused.
+
 ### §6.5 Rate limiting and abuse considerations
+
+Implementations MUST offer rate limiting on the verification and disclosure interfaces. Rate limiting is not part of the trust model (§4.1 is explicit that admission control is separate from signer identity), but is required at Layer 5 to prevent enumeration-by-timing (where an attacker probes many candidate identifiers to discover which resolve) and to prevent disclosure-endpoint abuse (where an attacker attempts to burn valid tokens with speculative redemptions).
+
+**Required posture.**
+
+- The verification interface (§6.1) SHOULD carry a per-caller rate limit sufficient to prevent enumeration probing. Precise numeric thresholds are implementation-defined; the reference implementation uses 60 requests per minute per source IP as a starting point.
+- The disclosure interface (§6.2, §6.3) MUST carry a stricter rate limit than the verification interface. Disclosure returns payload bytes, and lax rate limiting on disclosure functionally reintroduces bulk export. The reference implementation caps disclosure at 6 requests per minute per source IP.
+- Implementations MUST distinguish rate-limited responses from other error classes (the reference implementation uses HTTP 429 with a distinct body) so callers can back off appropriately.
+- Rate-limit tracking MUST NOT create a signer profile. Implementations MAY track per-IP or per-session request counts but MUST NOT correlate rate-limit state with signer identity in a way that reintroduces signer-linked enumeration through the back door.
+
+**Non-normative guidance.** Production deployments will typically front SWORN implementations with a dedicated reverse proxy, CDN, or API gateway that carries the actual rate-limiting load; the reference implementation's in-process rate limiter is a demonstration of the pattern, not a production-scale solution. Implementations SHOULD document their expected deployment posture so integrators can configure their edge appropriately.
 
 ---
 
