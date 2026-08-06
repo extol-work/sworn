@@ -386,15 +386,21 @@ For v0.1, implementations SHOULD assume signer keys are long-lived. Formal key r
 
 SWORN has no on-chain mutation of prior attestations. Revocation is expressed by signing a new attestation that references the target.
 
-**Required convention.** An attestation whose `activity_type` URI resolves to a revocation-class schema (for example, `sworn.dev/v1/revocation`) and whose `subject` field carries the 32-byte hash-or-identifier of the target attestation constitutes a revocation of the referenced attestation by the signing party.
+**Required convention.** An attestation whose `activity_type` URI resolves to a revocation-class schema (for example, `sworn.dev/v1/revocation`) and whose `subject` field is `SHA-256(target_canonical_bytes)` constitutes a revocation of the referenced target attestation by the signing party. The subject encoding is the same primitive used by `source_type = 14` (`external_sworn_attestation`) in §9.2, giving the whole additive-reference family (revocations, corrections, disputes, supersessions, endorsements of attestations) a single convention.
+
+Signers MUST populate `subject` with the exact 32-byte SHA-256 of the target's canonical byte sequence (§3.1). Implementations MUST NOT substitute other identifiers (attestation UUIDs, substrate-specific PDA addresses, human-readable labels) for `subject` in a revocation; those may live off-chain as metadata but do not participate in the cryptographic reference.
 
 Implementations MUST NOT delete, mutate, or otherwise alter the target attestation's record in response to a revocation. Both records remain durable. Verifiers walking the graph MUST see both the original attestation and any revocations of it, and MAY apply reader-side policy about how to weigh them.
 
 **Who can revoke.** Only the original signer of an attestation can revoke it in a way that discounts its standing at the reader's discretion. A revocation signed by a party other than the original signer is a first-class attestation in its own right (a "dispute" or "counter-claim") but is not a revocation of the target attestation's cryptographic validity. The original signature over the target's canonical bytes remains cryptographically valid regardless.
 
+**Dangling revocations.** A verifier MUST verify the revocation's signature per §3.1's verification procedure. A verifier MAY consider a revocation "applied" only to attestations whose canonical bytes hash to the value in `subject`. Revocations whose `subject` does not match any known attestation are legitimate signed statements but have no target to apply to; verifiers SHOULD retain them (a matching attestation may surface later, having previously been unknown to that verifier) but MUST NOT apply them to non-matching attestations even when the signer of the revocation matches the signer of some other attestation.
+
 **Additive-only rule.** Implementations MUST treat every revocation as an additive record in the notarization substrate. Implementations MUST NOT provide a "hard delete" or "unpublish" path at Layer 4 (§5.4). This is what makes SWORN's revocation semantics honest: a revocation is a fact about the signer's later intent, not an erasure of prior fact.
 
 **Interaction with key rotation.** Because v0.1 has no formal key rotation (§3.5), revocation requires the original signing key. If a signer has lost access to the key that produced an attestation, that attestation cannot be revoked in the v0.1 sense. The signer MAY sign a new attestation under a new key stating "I have lost control of key X and no longer stand behind attestations signed by it"; such a statement is a first-class attestation but does not carry the same weight as a same-key revocation. Formal key-compromise semantics are reserved for future versions.
+
+**Query shape.** Because `subject = SHA-256(target_canonical_bytes)` is substrate-neutral and self-computing, the query "find revocations of attestation X" is `WHERE activity_type = revocation-class AND subject = SHA-256(X_canonical_bytes) AND signer = X.signer` in every implementation, without per-substrate identifier translation. Implementations MAY maintain an index on `subject` restricted to revocation-class rows for efficiency.
 
 ### §4.4 Standing as an emergent property of the graph
 
