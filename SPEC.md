@@ -430,12 +430,76 @@ Implementations MAY build any of these on top of v0.1's single-signer-type primi
 
 ## §5 Layer 4: Notarization
 
-### §5.1 Hash-anchor commitment (substrate-agnostic)
-### §5.2 Merkle batching
+Layer 4 defines how an attestation's cryptographic identity is committed to a public, tamper-evident ledger so that any verifier, at any later time, can confirm the attestation existed at a specific point in time. The layer is substrate-agnostic: SWORN commits only to what must be published and how it must behave, not to which system publishes it. The two live substrate bindings maintained alongside this specification (Postgres via [extol-work/sworn-postgres](https://github.com/extol-work/sworn-postgres) and Solana SAS via Extol's production implementation) are documented in Appendix A and Appendix B.
+
+### §5.1 Hash-anchor commitment (required)
+
+The notarization substrate MUST publish, per attestation, at least the following:
+
+- **The `data_hash`** of the attestation as defined in §2.4 (32 bytes, SHA-256).
+- **The `signer`** public key (32 bytes) OR a substrate-native identifier from which the signer public key is deterministically resolvable.
+- **A substrate-native creation timestamp** (block time, commit time, log sequence number, or equivalent) that is monotonic within the substrate and that any verifier can independently read.
+
+The full 32-byte SHA-256 of the attestation's canonical byte sequence per §3.1 (denoted `attestation_hash` in the remainder of this section) is the substrate-agnostic identifier for cross-referencing an attestation from any other attestation (§2.5.2, §4.3, §9.2 source_type=14). Substrates MAY store additional attestation content on-chain (larger fields, entire canonical bytes, signature) at the implementation's discretion; substrates MUST store at least `attestation_hash` in a form the verifier can compute from the substrate's record without out-of-band information.
+
+**Anchor-produces, does-not-attest.** A notarization substrate publishing an attestation's hash is NOT itself attesting to the content of the attestation. The substrate's role is temporal: it establishes that the hash existed at a known point in time. Interpretations of the attestation live at Layer 3 (§4.4) and are reader-side concerns.
+
+**Independent hash recomputation.** For a verifier to trust the on-chain hash, the verifier MUST be able to independently reconstruct the canonical byte sequence (§3.1) from the attestation's stored fields and compute `SHA-256(canonical_bytes)`, then confirm the result matches what the substrate published. A substrate implementation that publishes a hash the verifier cannot independently reproduce from stored source material is NOT conforming. This property is what makes the three-implementation round-trip demo (Appendix C) meaningful: each party recomputes rather than trusting upstream.
+
+**Anchoring is not signing.** The party operating the notarization substrate MAY be a different party than the signer. Any party that possesses the canonical bytes and the signer's signature can compute the attestation's hash and publish it to the substrate; the signature is not touched or replaced during anchoring. This separation is required for the "sign locally, anchor via a service" pattern common in resource-constrained clients.
+
+### §5.2 Merkle batching (deferred)
+
+Batching multiple attestation hashes into a Merkle tree and anchoring only the root is a well-understood cost-reduction pattern used by several existing substrates. SWORN v0.1 deliberately does NOT specify a Merkle batching format at the protocol layer, for two reasons:
+
+1. **Implementation experience.** Extol's production Solana SAS binding uses Merkle batching as a per-tier cost optimization; sworn-postgres does not. Cross-implementation verification of batched proofs requires more design work than is warranted by two implementations, one of which does not currently need the feature.
+2. **Format lock-in risk.** Once a Merkle format is normative, changing it becomes a v1.0 breaking change (§3.3 analogy). Waiting until at least two independent implementations need it produces better format than committing early.
+
+**Interim guidance.** Implementations that batch (such as the Solana SAS binding documented in Appendix A) MUST anchor the resulting Merkle root as a distinct attestation-like record at Layer 4, and MUST provide off-chain inclusion proofs to verifiers on request. Inclusion proofs verified against a batched root MUST resolve to the individual attestation's `data_hash` per §5.1's independent-recomputation rule. Implementations SHOULD document their batching format in implementation notes; a normative Merkle format is reserved for v0.2.
+
+**Cross-substrate Merkle interoperability** (a verifier holding an inclusion proof from substrate A confirming an attestation is anchored to substrate B) is out of scope for v0.1.
+
 ### §5.3 Retention semantics (per-record, differing retention allowed)
-### §5.4 Durability guarantees for the on-chain hash
+
+Layer 1's `retention_hint` field (§2.7) expresses the signer's intent regarding payload retention. Layer 4 governs what happens to the on-chain hash under the same hint.
+
+**Required rule.** The on-chain hash MUST remain published for at least as long as the substrate maintains any record of the attestation. Substrates MUST NOT selectively expire on-chain hashes ahead of the substrate's own record-retention policy. If a substrate deletes the record entirely (subject to substrate policy), the hash goes with it; there is no on-chain-hash-without-substrate-record state.
+
+**Per-attestation heterogeneity.** A single notarization substrate MAY carry attestations with different `retention_hint` values, and those attestations MAY have different off-chain payload availability at any given time. A verifier MUST NOT assume all attestations in the same substrate share the same retention posture.
+
+**Retention is not validity.** An attestation whose `retention_hint` has passed and whose payload has been reclaimed is still a valid attestation at Layer 2. Its signature verifies. What has changed is its *disclosability* (§6): the payload may no longer be retrievable, so a verifier may see only metadata. The distinction between "invalid" and "undisclosable-but-valid" is preserved by never mutating the on-chain hash.
+
+### §5.4 Durability guarantees for the on-chain hash (required)
+
+The on-chain hash of an attestation, once published, MUST NOT be revoked, mutated, or reversed by the notarization substrate under any protocol-visible circumstance. This is the specification-level durability guarantee: a verifier reading the substrate can rely on the invariant that a hash present today was present at its published timestamp and will remain present for as long as the substrate itself exists.
+
+**Substrate-level failure modes** (chain reorganizations, ledger rollbacks, database restores) are out of protocol scope. Implementations MUST document what substrate-level guarantees they provide; verifiers MAY treat attestations from substrates with weaker durability differently in reader-side heuristics. But nothing at the protocol layer permits a substrate to selectively withdraw an attestation's hash while preserving others.
+
+**Revocation is additive, not durable-hash-mutating.** Per §4.3, revocation is expressed as a new attestation whose `subject` is `SHA-256(target_canonical_bytes)`. The revocation attestation itself is anchored per §5.1; the target attestation's on-chain hash is unaffected. A verifier walking the substrate sees both hashes and applies reader-side policy about how to weigh the revocation against the target (§4.4). Substrates MUST NOT interpret a revocation as license to delete or hide the target's on-chain hash. This is the anti-erasure discipline: an attestation once published, and any later revocations of it, are both matters of durable public record.
+
+**Substrate compromise.** If a substrate is discovered to have violated its published durability guarantees (an operator forcibly deleted hashes, a chain executed a policy-driven rollback), attestations previously anchored to it lose the temporal grounding the substrate was providing. Signatures over those attestations remain cryptographically valid, but the "the hash existed at time T" property collapses. Implementations SHOULD document a recovery posture: whether to re-anchor affected attestations to a different substrate, whether to accept substrate-A attestations as substrate-B attestations for graph-analysis purposes, and whether reader-side heuristics should discount attestations anchored to compromised substrates. Substrate-compromise recovery is not standardized in v0.1.
+
 ### §5.5 Off-chain payload storage (implementation-defined)
+
+Payloads are NOT stored on-chain by requirement of this specification. The on-chain record (§5.1) commits to the `data_hash`; the payload itself lives off-chain, typically in the implementation's application database (as in sworn-postgres and Cortex) or in an external content-addressed store.
+
+**Payload retrieval is not a Layer 4 concern.** The presentation layer (§6) governs how a verifier obtains a payload, subject to the consent semantics of §6.2. Layer 4's role ends at the hash commitment; making the payload retrievable is a Layer 5 responsibility.
+
+**Reclaimed payloads and hash validity.** A payload reclaimed per §2.7's `retention_hint` semantics does NOT affect the on-chain hash's validity. Verifiers that receive only metadata (the on-chain hash and the attestation's field structure without a retrievable payload) can still confirm the signature is valid, can still verify the signer identity, and can still walk the graph to see revocations and corroborations. What they cannot do is verify that any candidate payload they encounter later matches the `data_hash`; that check requires the payload itself.
+
+**Substrate MAY store payloads.** Nothing in this specification prevents a substrate from storing the full payload on-chain if the substrate's storage economics allow it. Substrates that do so simply collapse §5's off-chain-payload assumption into on-chain storage. The verifier's independent-recomputation rule (§5.1) still applies: the payload's canonicalized-JSON SHA-256 MUST equal the published `data_hash`.
+
 ### §5.6 What is NOT in this layer (specific chain choice, PDA layouts; see appendices)
+
+The following are explicitly out of scope for §5's required text:
+
+- **Choice of substrate.** Whether an implementation uses Solana, Ethereum, Bitcoin, a Postgres append-only table, a git-anchored log, or a certificate-transparency log is an implementation decision. SWORN v0.1 requires only that the substrate satisfy §5.1's publication rule and §5.4's durability rule.
+- **Substrate-specific data formats.** How a Solana PDA is structured, how a Postgres row is laid out, how an Ethereum event is encoded: all substrate-defined. Appendix A documents the Solana SAS binding; Appendix B documents the Postgres binding. Neither is normative for other substrates.
+- **Substrate-native identifiers as attestation subjects.** An attestation MAY reference a substrate-native identifier (a Solana account address, an Ethereum transaction hash, a git commit) as its `subject` when the activity type's schema calls for it, but such references are activity-type-defined and MUST NOT substitute for the SHA-256 hash primitive when the target is another SWORN attestation (§4.3).
+- **Cost, throughput, and operational economics.** Which substrate is cheapest per attestation, which is fastest to publish, which offers the strongest durability guarantees: all substrate-choice concerns. SWORN v0.1 makes no recommendation. Implementations SHOULD document their substrate's cost and throughput characteristics so integrators can choose accordingly.
+- **Substrate discovery.** How a verifier learns which substrate anchors a given attestation is a Layer 5 concern (§6.1's verification-endpoint contract) or an application-layer concern, not a Layer 4 mechanism.
+
+Implementations that wish to add substrate-specific behavior (batched anchoring, on-chain payload storage, custom retention policies) MAY do so provided the required text of §5.1 through §5.4 is preserved. Where an implementation's substrate cannot satisfy the required text (for example, a substrate that does not guarantee hash durability), that substrate is NOT conforming for SWORN attestations regardless of what else it provides.
 
 ---
 
