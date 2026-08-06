@@ -38,7 +38,7 @@ Both runners implement two SWORN conformance tests from SPEC §10.2:
   byte-for-byte.
 
 T-2 through T-9 exercise the HTTP surface of a running implementation and
-live in [`../tests/`](../tests/) once that suite lands.
+live in [`../tests/`](../tests/).
 
 ## Adding a third runner
 
