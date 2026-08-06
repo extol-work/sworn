@@ -1,0 +1,14 @@
+{
+  "name": "sworn-vector-check-node",
+  "version": "0.1.0-final",
+  "description": "Independent Node.js implementation of the SWORN v0.1-final canonical byte sequence and Ed25519 signing path, run against the golden test vectors.",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "check": "node src/check.mjs"
+  },
+  "license": "Apache-2.0"
+}
