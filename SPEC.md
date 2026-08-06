@@ -170,7 +170,9 @@ Three hashes appear in the canonical byte sequence for signing:
 
 - **`data_hash`** (32 bytes): `SHA-256(canonicalized JSON payload)` per §2.3. This commits to the semantic content of the attestation without requiring the payload to be transmitted, stored publicly, or preserved indefinitely.
 
-- **`source_hash`** (32 bytes): `SHA-256(canonical source identifier)` per §9.2's per-source-type canonicalization rules. This commits to the specific external source the signer relied on. When `source_type` is `unknown` (0) or `self_reported` (1), `source_hash` MUST be 32 zero bytes.
+- **`source_hash`** (32 bytes): `SHA-256(canonical source identifier)` per §9.2's per-source-type canonicalization rules. This commits to the specific external source the signer relied on.
+
+**Sourceless attestations (normative).** When `source_type ∈ {0, 1}` (that is, `unknown` or `self_reported`), `source_hash` MUST be exactly 32 zero bytes. Signers MUST NOT populate `source_hash` for sourceless attestations. Verifiers MUST reject any attestation whose `source_type` is `unknown` or `self_reported` and whose `source_hash` is not 32 zero bytes; such attestations are malformed at Layer 1 and fail verification independently of signature validity.
 
 Implementations MUST use SHA-256 for all three. Additional hash algorithms may be registered in future versions of this specification.
 
