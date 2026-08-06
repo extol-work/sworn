@@ -35,7 +35,7 @@ SWORN defines *how* testimony is captured and verified. What you build on top of
 ## For reviewers
 
 - Read [RFC.md](./RFC.md) for what we're asking you to weigh in on.
-- Try [sworn-postgres](https://github.com/extol-work/sworn-postgres) to sign your first attestation in five minutes.
+- Follow [QUICKSTART.md](./QUICKSTART.md) to sign your first attestation in five minutes.
 - Attest to this specification at the commit hash you reviewed. That signature becomes part of the graph.
 
 ## Layers
