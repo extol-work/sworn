@@ -653,10 +653,77 @@ The verifier cannot confirm what payload the `data_hash` covered without recover
 
 ## §8 Privacy considerations
 
+SWORN's privacy properties emerge from a specific split: the *facts of attestation* (who signed, when, about what class of subject, anchored where) are public and verifiable by anyone; the *content of the payload* is not published on the ledger and is retrievable only through the disclosure discipline of Layer 5 (§6). This section names what that split provides, what it does not, and where implementers must carry privacy load the protocol deliberately does not carry.
+
+Privacy in SWORN is not a matter of hiding attestations. Attestations are, by construction, cryptographically committed to a public substrate so anyone can verify them independently (§5.1). Privacy is a matter of controlling *what verifiers can learn from the graph beyond what the signer intended to disclose*. That control lives at three layers: the payload split (§8.1), the subject-consent flow for disclosure (§8.2), and the pseudonymity of signers and subjects (§8.4). Where privacy meets immutability, the resulting tension is real and named honestly (§8.3).
+
 ### §8.1 Public verification, private payloads
+
+The canonical byte sequence signed by the signer (§3.1) commits to `data_hash`, a SHA-256 of the canonicalized payload. The payload itself is never part of the canonical bytes. This is the primitive that makes public verification of private content possible: a verifier can confirm that a payload matches an attestation without the payload having ever been published on the substrate.
+
+**Required semantics.** Implementations MUST NOT publish attestation payloads to the notarization substrate as a side effect of anchoring the hash. A substrate MAY store payloads on-chain if the implementation deliberately chooses to, subject to that choice's downstream implications (§5.5 and §8.3 both apply to on-chain payload storage). The default posture, and the reference implementation's posture, is that payloads live off-chain and reach verifiers only through Layer 5's disclosure endpoints.
+
+**What is public regardless.** The following are always readable by any party with access to the notarization substrate: `signer` pubkey, `subject` field (which may itself be a pubkey or a content hash), `activity_type` URI, `data_hash`, `source_hash` and `source_type` (provenance is signed content, §2.5), timestamps, `witness_for`, `nonce`, and `signature`. Implementers designing subject or provenance schemas MUST assume these fields are as public as the substrate they anchor to.
+
+**Implication for `subject` design.** If an activity type places a real-world identifier directly into `subject` (a bare email address, a legal name), that identifier is public. Activity type schemas that need subject privacy SHOULD use a content hash of an identifier plus a per-subject salt held by the signer, not the identifier itself. The protocol does not enforce this because it is a schema-design decision, but implementations documenting activity types SHOULD note the visibility implications of their subject encoding.
+
 ### §8.2 Subject-mediated disclosure
+
+Layer 5's two-call design (§6.2, §6.3) is the required mechanism by which a verifier gains access to an attestation's payload. Verification of the signature is one call and requires no subject involvement; disclosure of the payload is a separate call and requires a signer-authorized disclosure token. This split is the privacy primitive that distinguishes SWORN from a public database of signed statements.
+
+**Required semantics.** Implementations MUST NOT expose an unauthenticated payload-retrieval path indexed by attestation identifier. Any endpoint that returns payload content MUST require a valid disclosure token per §6.3. Implementations MUST NOT bypass token requirements for administrative, debugging, or convenience reasons that are not explicitly documented and subject-controllable.
+
+**Who authorizes disclosure.** In v0.1 the disclosure token is minted by the signer (§6.3), which is the same party that produced the attestation. This is the simplest privacy model: the party who signed the attestation controls who can read it. Implementations MAY offer signer-delegated disclosure policies (a signer grants a third party the right to mint tokens for a defined subset of the signer's attestations) provided such delegation is itself an attestation subject to §1.5 transparency. The delegation cannot be silent.
+
+**Subject-as-signer case.** When the signer is also the subject (`attestor_relationship = self`, §9.4), signer-authorized disclosure is equivalent to subject-authorized disclosure. Most privacy-relevant cases in practice are this case: an individual signing an attestation about themselves controls their own disclosure. Cases where signer and subject differ are addressed by activity-type schemas that either require the subject's own attestation of consent before the primary attestation is honored, or leave the trust decision to reader-side heuristics.
+
+**What subjects can NOT do in v0.1.** A subject who is not the signer cannot revoke, block, or veto an attestation about themselves at the protocol layer. This is a real limitation and is addressed at the application layer, not the spec layer: implementations that need "subject-veto" semantics MUST build them as application conventions (for example, an application-level rule that attestations about a subject are only honored if the subject has signed a consent attestation naming the potential attestor). SWORN v0.1 does not enforce such conventions; it does not preclude them.
+
 ### §8.3 Right to be forgotten and immutable hashes
+
+The tension between GDPR-style deletion rights and cryptographic immutability is real and not resolvable by protocol design alone. This section names how SWORN divides the surface so that the resolvable parts can be resolved and the unresolvable parts are legible as such.
+
+**What SWORN makes tractable.**
+
+Because payloads are stored off-chain and are subject to the retention hint (§2.7, §5.5), the content that carries personal data can be discarded by the parties retaining it. A subject requesting erasure can be honored by removing the payload from every retention source under the implementation's control. The on-chain hash remains, but the hash alone reveals nothing about the payload beyond that some 32-byte value was committed. This is the shape that makes SWORN compatible with erasure requests on the payload dimension.
+
+**What remains public regardless.**
+
+The `signer`, `subject`, `activity_type`, `data_hash`, provenance fields, and timestamps remain durable on the substrate. If the `subject` field carries a real-world identifier directly, that identifier remains public even after payload deletion. If provenance points at an external source (`source_hash` = SHA-256 of an ORCID URL, for instance), the source reference remains public. Implementers designing schemas that must satisfy erasure requests SHOULD ensure real-world identifiers appear only inside the payload, not in fields that go into the canonical byte sequence. Once a personal identifier is in the signed bytes, it is not erasable without invalidating every signature over it.
+
+**Required disclosure to signers and subjects.**
+
+Implementations that accept personal data into SWORN attestations MUST clearly disclose, before signing, which fields will be public on the substrate and which will be retention-controllable. Signers and subjects MUST be able to distinguish "this data is anchored publicly forever" from "this data is retained off-chain and can be discarded on request." Silent conflation is a privacy failure; the disclosure requirement makes the split legible at the moment the choice matters.
+
+**When the on-chain remainder is itself sensitive.**
+
+There are cases where even the surviving metadata (fact of signing, activity type, timestamp) constitutes personal data under a strict reading of applicable law. SWORN v0.1 provides no protocol mechanism to erase this surviving metadata; a substrate that permits erasure of published records is not conforming with §5.4 (durability). Implementations for which this is unacceptable MUST either use SWORN only for content whose metadata is not itself personal data, or NOT use SWORN for that content class. Naming the limitation explicitly is what makes the spec honest about the constraint rather than promising a compatibility it cannot deliver.
+
+**Non-normative posture.** The reference implementation defaults to `retention_hint = -1` (indefinite) but exposes both bounded retention hints and payload-reclaim jobs (see the `sworn-postgres` implementation and `IMPLEMENTATION_NOTES.md`) so operators can offer subjects genuine deletion of payload content while preserving the signature-validity properties the spec requires.
+
 ### §8.4 Pseudonymity of witnesses
+
+Signers are 32-byte Ed25519 public keys (§4.1). The mapping between a public key and any real-world person or organization is implementation-defined and outside the protocol. This is the privacy property that lets SWORN carry attestations from parties who do not wish to reveal their real-world identity.
+
+**Required semantics.** Implementations MUST NOT require signers to be linked to a verified real-world identity as a condition of accepting their attestations. Implementations MAY offer verified-identity annotations as an off-chain metadata layer (a signer's pubkey associated with a verified email, ORCID, or organizational role) subject to §1.5 where such annotations are used to convert standing into value. The protocol itself accepts signers on the basis of key possession alone.
+
+**Pseudonymity is not anonymity.**
+
+Standing accumulates to a public key. A pseudonymous signer who accumulates a large body of attestations has, from a reader's perspective, a legible history under that pseudonym. This is intentional: it is what allows pseudonymous signers to build standing over time without revealing their real-world identity. It is also what makes correlation attacks against pseudonymous signers possible in principle. A reader who can link `signer` pubkey P to a real-world entity by other means (traffic analysis, off-chain leaks, self-disclosure) can then attribute all of P's attestation history to that entity.
+
+Implementations that offer pseudonymous signing SHOULD warn signers that pseudonymity across many attestations creates linkability that a single attestation would not. Signers who want true unlinkability across attestations MUST use a distinct key per attestation, accepting the loss of accumulated standing under any one pseudonym. The protocol makes both patterns possible and enforces neither.
+
+**Subject pseudonymity.**
+
+The same reasoning applies to subjects when the subject is a pubkey rather than a content hash. A subject who is named across many attestations by the same or overlapping signers accumulates a public profile under that pubkey. Activity type schemas that need stronger subject anonymity SHOULD use per-attestation content hashes rather than persistent subject pubkeys, at the cost of losing cross-attestation subject continuity.
+
+**What the protocol does NOT provide.**
+
+- No mixnet or anonymizing network for the anchoring transaction. If a signer publishes an anchoring transaction to a public substrate from a network location that reveals their identity, the protocol does not conceal that.
+- No zero-knowledge proofs of attestation properties in v0.1. A verifier who wants to know "does the signer have at least three ORCID-sourced attestations without learning which three" has no protocol-level primitive for that question. Deferred to a future version (see `OPEN_QUESTIONS.md`).
+- No forward secrecy for disclosed payloads. Once a payload is disclosed under a valid token, the recipient has a copy and can retain, redistribute, or leak it. Disclosure tokens control who gets initial access; they do not control what the recipient does after.
+
+Implementations that need any of these properties MUST build them at a higher layer, understanding that the underlying SWORN protocol does not enforce them.
 
 ---
 
