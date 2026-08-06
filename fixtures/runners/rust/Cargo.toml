@@ -1,0 +1,21 @@
+[package]
+name = "sworn-vector-check"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "SWORN v0.1-final golden-vector conformance runner (Rust). Self-contained; no dependency on any specific SWORN implementation."
+publish = false
+
+[[bin]]
+name = "sworn-vector-check"
+path = "src/main.rs"
+
+[dependencies]
+# Pure crypto only. Deliberately does NOT depend on sworn-verify or any other
+# implementation crate. The point of the runner is to be an independent
+# implementation of the canonical byte sequence per SPEC §3.1 that any reader
+# can inspect against the spec text.
+ed25519-dalek = { version = "2.1", default-features = false, features = ["std"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+hex = "0.4"

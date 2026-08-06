@@ -1,3 +1,13 @@
 INTERNAL_ROADMAP.md
 INTERNAL_*.md
 .internal/
+
+# Rust build artifacts (from fixtures/runners/rust/ and future runner crates)
+target/
+**/target/
+
+# Editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
