@@ -935,11 +935,25 @@ Implementations SHOULD contribute additional vectors as they discover edge cases
 
 ## Appendix A: Solana / SAS binding (informative)
 
-Extol's on-chain implementation notes. First production adopter. Not required.
+Extol, Inc. maintains the first production adopter of SWORN as an on-chain implementation using Solana Attestation Service (SAS) as the notarization substrate (§5.1). The full binding documentation lives with Extol's implementation and is not duplicated here. This appendix captures the properties that binding must satisfy to remain conforming, so future Solana-substrate implementations can align.
+
+**Substrate obligations.** SAS anchoring publishes `attestation_hash = SHA-256(canonical_bytes)` as a Solana PDA whose account data contains the hash and the signer's public key. This satisfies §5.1's publication requirement. The PDA's slot / block-time gives the monotonic timestamp §5.1 requires. Signer independence is preserved because SAS anchoring is a Solana transaction submitted by an anchoring service, not by the signer; the signer's Ed25519 key never appears in a Solana transaction as a transaction signer for anchoring purposes.
+
+**Substrate discipline.** A Solana-substrate implementation MUST NOT invoke any hypothetical SAS instruction that unpublishes, mutates, or reverses a hash anchor, even if the substrate exposes such an instruction. This is a spec-level obligation per §5.4 and §10.2 (T-9). SAS's current design is append-only, which aligns with SWORN's requirements natively; future Solana features that break this alignment would be off-limits for SWORN records regardless of what else they enable.
+
+**Substrate-specific concerns not covered here:** PDA seed schema, account layout, compute-budget optimization, priority-fee policy, indexing patterns via Geyser or Helius. All of these are Solana-implementation detail that live in the reference implementation's documentation, not in this specification.
 
 ## Appendix B: Postgres binding (informative)
 
-Reference implementation notes. See [extol-work/sworn-postgres](https://github.com/extol-work/sworn-postgres).
+The reference implementation at [extol-work/sworn-postgres](https://github.com/extol-work/sworn-postgres) uses Postgres as the notarization substrate. Full implementation documentation lives with that repository; this appendix captures the binding shape so future non-blockchain substrate implementations (git-anchored logs, certificate-transparency logs, other append-only databases) can align on the pattern.
+
+**Substrate obligations.** The reference implementation stores each attestation as a row in an append-only `attestations` table. The row carries the full attestation content (signer, subject, provenance fields, canonical bytes, signature). `attestation_hash = SHA-256(canonical_bytes)` is derived on demand rather than stored separately. Append-only semantics are enforced by convention (no UPDATE or DELETE paths exposed by the application) rather than by database-level triggers; a production deployment MAY strengthen this with role-based revocation of UPDATE and DELETE privileges on the table.
+
+**Substrate discipline.** A Postgres-substrate implementation MUST NOT provide operational tooling that mutates or deletes attestation rows post-insert, even for administrative convenience. Retention-hint-driven payload reclamation (§5.5) is the sole exception and touches only the `payload` column, never the fields covered by the signature.
+
+**Reference implementation status.** The `sworn-postgres` implementation is a Layer 5 Notarizer per §10.1 conformance levels. It passes T-1 through T-9 of the §10.2 interoperability tests as executed by the conformance runners at `fixtures/tests/rust/` in this repository.
+
+**Substrate-specific concerns not covered here:** SQL schema, indexing strategy, connection pooling, backup and disaster-recovery posture. All live in the reference implementation's documentation.
 
 ## Appendix C: Worked examples
 
@@ -952,6 +966,62 @@ Reference implementation notes. See [extol-work/sworn-postgres](https://github.c
 - **Cross-implementation verification.** Postgres-signed attestation verified by a Solana implementation. Signatures match because `canonical_bytes` are identical byte-for-byte; substrate is irrelevant to signature verification.
 
 ## Appendix D: Glossary
+
+Terms defined normatively elsewhere in the specification are cross-referenced back to their defining section.
+
+**Anchor / Anchoring.** The act of publishing an `attestation_hash` to the notarization substrate. See §5.1.
+
+**Attestation.** A signed statement by one party (the signer) about another party or artifact (the subject). See §1.2 and §2.1.
+
+**Attestation hash.** `SHA-256(canonical_bytes)`. The 32-byte value used to cross-reference attestations across implementations and to anchor to substrates. See §5.1.
+
+**Attestor relationship.** A signed enum (§9.4) capturing the signer's relationship to the subject at time of attestation. Snapshot, not live state. See §2.5.
+
+**Backfilled provenance.** Provenance data populated during migration from v0.1-preview to v0.1-final. Distinguished from original provenance via an off-chain `provenance_origin` flag. See §2.8.
+
+**Canonical bytes.** The 248-byte sequence over which the Ed25519 signature is computed. Fully specified in §3.1.
+
+**Canonical source identifier.** The normalized form of an external source identifier used as input to SHA-256 to produce `source_hash`. Per-source-type rules registered in §9.2.
+
+**Confidence.** A u16 in basis points (0 to 10000) expressing the signer's own estimate of the claim's strength at signing time. See §2.5.
+
+**Conforming implementation.** Any software that satisfies the required text of the conformance level it declares. See §10.1.
+
+**Data hash.** `SHA-256(canonicalized JSON payload)`. Commits to the payload's semantic content without requiring the payload be public. See §2.4.
+
+**Derived signal.** A ranking, tier, score, or other interpretation computed from the attestation graph. NOT an attestation. Subject to §1.5's transparency requirement where converted to value.
+
+**Disclosure token.** A single-use, time-limited authorization for payload retrieval, produced by the signer of the target attestation. See §6.3.
+
+**Layer.** One of five ordered abstractions (Testimony, Signing, Registry, Notarization, Presentation) that structure SWORN. See §1.3.
+
+**Nonce.** A 32-byte value ensuring signature uniqueness across otherwise-identical attestation content. See §3.4.
+
+**Notarization substrate.** The public, tamper-evident record where attestation hashes are anchored. May be a blockchain, an append-only database, a certificate-transparency log, or equivalent. See §5.1.
+
+**Original provenance.** Provenance data populated at the time of the original attestation, distinguished from backfilled provenance via `provenance_origin` metadata. See §2.8.
+
+**Payload.** The semantic content of the attestation. Not signed directly; only its hash is. See §1.2 and §2.4.
+
+**Provenance.** The signer's claim about the origin and epistemic depth of an attestation, captured by `source_hash`, `source_type`, `confidence`, `witnessing_depth`, and `attestor_relationship`. Signed content. See §2.5.
+
+**Revocation.** An additive attestation whose `activity_type` resolves to a revocation-class schema and whose `subject` is `SHA-256` of the target attestation's canonical bytes. See §4.3.
+
+**Signer.** The Ed25519 public key that produced an attestation's signature. Exactly the public key; nothing else. See §1.2 and §4.1.
+
+**Source hash.** `SHA-256(canonical source identifier)` per §9.2. Zero bytes when `source_type ∈ {unknown, self_reported}`. See §2.4.
+
+**Source type.** A registered u16 enum (§9.2) identifying the kind of source the signer relied on.
+
+**Spec version.** A u16 at position 0 of the canonical byte sequence, identifying which SWORN spec revision the attestation was signed against. Value 2 = v0.1-final; value 1 = deprecated v0.1-preview. See §3.1.
+
+**Standing.** The accumulated graph of attestations signed by and naming a signer. Not a score. Not a token. Not transferable. See §1.5, §4.4.
+
+**Subject.** The entity being attested about. May be a pubkey, a content hash, or an activity-type-defined 32-byte identifier. See §2.5.
+
+**Verifier.** Any party that reads an attestation and checks its authenticity. Distinct from signer and subject. Also called a reader.
+
+**Witnessing depth.** A registered u8 enum (§9.3) capturing the epistemic depth of the witnessing act itself. Orthogonal to source type. See §2.5.
 
 ## Appendix E: Changelog
 
