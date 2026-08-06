@@ -61,7 +61,7 @@ The reference implementation ([extol-work/sworn-postgres](https://github.com/ext
 
 Attestations to the spec become part of the SWORN graph and are themselves verifiable by any conforming implementation.
 
-**Path 1: direct signature.** The reference implementation hosts a public collection endpoint at [sworn.extol.work/rfc](https://sworn.extol.work/rfc) *(coming with the sworn-postgres v0.1 release)*. Submit a signed attestation whose subject is a commit hash of this repository. The endpoint verifies your signature, records the attestation, and returns a permalink. You do not need a GitHub account.
+**Path 1: direct signature.** A public collection endpoint hosted by Extol at [dev.extol.work/sworn/rfc](https://dev.extol.work/sworn/rfc) *(coming, tracked in `extol-work/sworn-rfc`)* accepts signed attestations whose subject is a commit hash of this repository. The endpoint verifies your signature, records the attestation, and returns a permalink. You do not need a GitHub account for the direct-signature path.
 
 **Path 2: five-minute quickstart.** If you want to generate a keypair and sign your first attestation from scratch, follow [sworn-postgres README](https://github.com/extol-work/sworn-postgres#quickstart). The RFC is the recommended first subject.
 
