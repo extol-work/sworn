@@ -44,11 +44,11 @@ That is the whole specification. Interpretations of the attestation, its social 
 
 This specification is organized in five layers. A conforming implementation MUST implement all five.
 
-- **Layer 1, Testimony (§2).** The structure of an attestation record.
-- **Layer 2, Signing (§3).** How an attestation is bound to a signer.
-- **Layer 3, Registry (§4).** Signer identity semantics and revocation.
-- **Layer 4, Notarization (§5).** How attestation hashes are committed to Solana Attestation Service.
-- **Layer 5, Presentation (§6).** How third parties verify attestations.
+- **Layer 1, Testimony (§2):** The structure of an attestation record.
+- **Layer 2, Signing (§3):** How an attestation is bound to a signer.
+- **Layer 3, Registry (§4):** Signer identity semantics and revocation.
+- **Layer 4, Notarization (§5):** How attestation hashes are committed to Solana Attestation Service.
+- **Layer 5, Presentation (§6):** How third parties verify attestations.
 
 A partial-conformance implementation MAY implement Layers 1 and 2 only, without publishing to a substrate. Such an implementation produces signed attestations that any Layer 4 party can later notarize; it does not itself provide the notarization property.
 
