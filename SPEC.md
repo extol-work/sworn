@@ -1,96 +1,78 @@
-# SWORN Specification v0.1-final
+# SWORN Specification v0.2
 
-**Status:** DRAFT. Not stable. Not soliciting external review until the reference implementation exercises the text and surfaces the gaps.
+**Status:** RFC Draft. Under revision from v0.1-final following review; not yet accepting signatures against this text.
 
-§1 through §3 have required text drafted against a working reference implementation. §4 through §10 are section outlines pending drafts that will be written from working code, not from prose.
+**Notation.** The words MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY carry their RFC 2119 meaning throughout.
 
-**Notation:** The words MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are to be interpreted as described in RFC 2119.
-
----
-
-## Preface: v0.1-preview to v0.1-final
-
-This specification advanced from v0.1-preview to v0.1-final during the pre-review window, following reviewer discussion of provenance treatment at Layer 1. The two revisions differ substantively: v0.1-final adds five provenance fields to the canonical byte sequence (`source_hash`, `source_type`, `confidence`, `witnessing_depth`, `attestor_relationship`) and prefixes the sequence with an explicit `spec_version` marker. The canonical byte length grew from 208 bytes to 248 bytes.
-
-Because no external reviewer had attested to the v0.1-preview canonical bytes, the transition preserves the RFC's posture that accumulating corroboration, not committee ratification, governs how versions advance. The v0.1-preview text remains in the repository history and its canonical bytes are not conforming to v0.1-final. A signature over v0.1-preview bytes is not a signature over v0.1-final: any implementation that participated in pre-review signing knows their signatures require re-issuance under v0.1-final semantics to be conforming.
-
-This transition is spec hygiene, not walk-back. Publishing a preview, taking review, restructuring cleanly before external attestation begins is the RFC posture working exactly as intended.
+**Companion documents.** PRIMER.md explains the design intent and history. bindings/sas.md defines the required Solana binding. bindings/postgres.md documents a partial-conformance Postgres binding. This document is the only normative artifact.
 
 ---
 
 ## §1 Overview
 
-### §1.1 Purpose
+### §1.1 What this specifies
 
-SWORN specifies how testimony (the small, corroborable claims that used to live in guilds, unions, and professional societies) can be captured cryptographically so that anyone can verify it later, from anywhere, without needing to trust the platform where it was originally recorded.
+SWORN specifies how a signer produces a signed statement of fact, how that statement's cryptographic identity is committed to a public ledger, and how a later verifier confirms both the signature and the ledger commitment without trusting the platform that produced the statement.
 
-A conforming SWORN attestation has four properties:
+A conforming SWORN attestation has three properties:
 
-- **Durable.** The attestation's hash is committed to a public, tamper-evident ledger.
-- **Portable.** The attestation carries its own signature and provenance; no lookup against the platform of origin is required to verify it.
-- **Independently verifiable.** Any party with the attestation can verify its signature without permissioned access.
-- **Sourceable.** The attestation names its own origin (via `source_hash` and `source_type`), so a verifier can reason about the claim's basis, not only about the signer's identity.
+- **Signed.** A specific signing key produced a signature over a specific canonical byte sequence.
+- **Notarized.** The attestation's identifying hash is committed to a public, tamper-evident substrate at a substrate-native timestamp any verifier can read.
+- **Independently verifiable.** Any party holding the attestation and the substrate's public state can confirm both properties without further permission or coordination.
 
-A signature tells you who staked their name. Provenance tells you what they staked it on. The two together are what separates a witnessed claim from a credit-report fact you cannot audit.
-
-This document defines version 0.1 of the specification. It is deliberately minimal. Multi-signer role patterns, delegation, and cross-chain notarization are reserved for future versions (see [OPEN_QUESTIONS.md](./OPEN_QUESTIONS.md)).
+That is the whole specification. Interpretations of the attestation, its social meaning, its relationship to reputation or reward, and any use to which it is put by a downstream application, are all outside the specification. See §1.4 for the non-goals SWORN explicitly does not undertake.
 
 ### §1.2 Terminology
 
-**Attestation.** A signed statement by one party (the *signer*) about another party or artifact (the *subject*). The statement is captured as a fixed-length hash of a payload, together with metadata that describes what class of statement is being made, when, and from what source.
+**Attestation.** A signed statement by one party (the *signer*) about another party or artifact (the *subject*). The statement commits to a payload via that payload's hash, together with metadata describing the class of statement, when it was made, and what source the signer relied on.
 
-**Signer.** The public key that produced an attestation's signature. Standing accrues to the signer, not to the person or organization that operates it. Signers are persistent (the same key over time), but the mapping between a signer and any real-world identity is implementation-defined.
+**Signer.** The Ed25519 public key that produced an attestation's signature. Signer identity is exactly the public key. Any mapping between a signer and a real-world person or organization is outside this specification.
 
-**Subject.** The entity being attested about. May be another SWORN signer, an arbitrary public key, or a content hash. Subject semantics are activity-type-defined.
+**Subject.** The entity being attested about. May be another SWORN signer's public key, an arbitrary public key, or a 32-byte content hash. The interpretation is defined by the attestation's activity type schema.
 
-**Payload.** The semantic content of the attestation. Free-form structured data whose shape is determined by the activity type. The payload is NOT committed on-chain; only its hash is (§2.4, §5.1).
+**Payload.** The semantic content of the attestation. A JSON object whose shape is defined by the activity type. The payload is not signed as bytes; the payload's canonicalized hash is.
 
-**Activity type.** A URI naming the class of claim being made (e.g., `work.extol.attestation/v1/contribution`, `sworn.dev/validator/v1/block-building-disclosure`). Activity types define the payload schema.
+**Activity type.** A URI naming the class of claim being made. The URI names a schema document that defines the payload's structure.
 
-**Provenance.** The signer's claim about the origin of an attestation, captured by two orthogonal axes: *what source* (via `source_hash` and `source_type`) and *how the witnessing occurred* (via `witnessing_depth` and `attestor_relationship`). Provenance is signed content; it commits the signer's claim about origin as part of the attestation. Provenance is the signer's assertion, not the verifier's guarantee (§2.5).
+**Provenance.** The signer's claim about the origin of the attestation, captured by four fields on the canonical byte sequence: `source_type`, `source_hash`, `confidence`, `witnessing_depth`, and `attestor_relationship`. Provenance is a claim, not a guarantee (§2.5.1).
 
-**Notarization substrate.** The public, tamper-evident ledger where attestation hashes are committed. May be a blockchain, a git-anchored append-only log, a certificate transparency log, or any equivalent system. Substrate choice is implementation-defined (§5.1); interoperability is achieved through the substrate registry (§9.6).
+**Notarization substrate.** The public, tamper-evident ledger where attestation identifying hashes are committed. In v0.2 this is Solana Attestation Service (SAS) as defined in bindings/sas.md. Other substrates may satisfy Layer 1 and Layer 2 only (see bindings/postgres.md); they do not offer Layer 4 conformance.
 
-**Standing.** The accumulated history of attestations to or by a signer. Standing is NOT a score; it is a graph. Standing MUST NOT be transferable (§1.5). Any conversion of standing into transferable value is a product-layer concern subject to the transparency requirement in §1.5.
-
-**Conforming implementation.** Any software that produces, stores, and verifies attestations per this specification. See §10 for conformance criteria.
+**Conforming implementation.** Software that produces, stores, notarizes, and verifies attestations per this specification. See §10 for the levels of conformance.
 
 ### §1.3 Layer model
 
-SWORN is organized in five layers:
+SWORN is organized in five layers. A conforming implementation MUST implement all five.
 
-- **Layer 1, Testimony (§2):** the structure of an attestation record, including its provenance
-- **Layer 2, Signing (§3):** how an attestation is bound to a signer
-- **Layer 3, Registry (§4):** signer identity semantics and revocation
-- **Layer 4, Notarization (§5):** how attestation hashes are committed to a public ledger
-- **Layer 5, Presentation (§6):** how third parties verify attestations
+- **Layer 1, Testimony (§2).** The structure of an attestation record.
+- **Layer 2, Signing (§3).** How an attestation is bound to a signer.
+- **Layer 3, Registry (§4).** Signer identity semantics and revocation.
+- **Layer 4, Notarization (§5).** How attestation hashes are committed to Solana Attestation Service.
+- **Layer 5, Presentation (§6).** How third parties verify attestations.
 
-Layers may be implemented independently, but a conforming implementation MUST implement all five. Implementations MAY use any substrate for Layer 4 (§5.1) and any presentation contract that satisfies §6's constraints.
+A partial-conformance implementation MAY implement Layers 1 and 2 only, without publishing to a substrate. Such an implementation produces signed attestations that any Layer 4 party can later notarize; it does not itself provide the notarization property.
 
-### §1.4 Notational conventions
+### §1.4 What SWORN does not specify
 
-The words MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY in this document are to be interpreted as described in RFC 2119.
+SWORN does not define any of the following. Any product built on SWORN that offers these properties does so above the specification, in its own documentation and under its own terms.
 
-Byte-level fields are described in little-endian byte order unless explicitly noted. All hashes are SHA-256 (per FIPS 180-4) unless otherwise specified. All signatures are Ed25519 (per RFC 8032, §3.2) unless a registered alternative algorithm is used (§3.3).
+- **Witnessing as a protocol operation.** SWORN produces signed statements by one party. A `witness_for` field exists in the record (§2.6) as an optional pointer to another party, but the protocol does not run a two-party ceremony and does not enforce anything about the referenced party's participation. Applications that want multi-party witnessing build it above SWORN as composition of independent attestations.
+
+- **Non-transferability.** A signed byte sequence is copyable and portable by its nature. SWORN does not define an owner field, a transfer instruction, or any mechanism that would make one attestation belong to one key more than another. The v1 Solana binding forbids the tokenize and close instructions on the underlying SAS attestations (bindings/sas.md §4), which prevents the substrate itself from expressing transfers or deletions; it does not prevent an application from constructing derived assets that reference SWORN attestations. Non-transferability at the product layer is application policy, not specification property.
+
+- **A scoring, ranking, or aggregate quality function.** The graph of attestations is a public record. Interpretations of it (how to weigh peer-witnessed against computed-match provenance, how to decay older attestations, how to compose several corroborations) belong to readers. Two implementations reading the same graph may compute different derived signals for legitimate reasons.
+
+- **Real-world identity verification, proof-of-personhood, KYC.** The signer is a public key. Any binding of that key to a real-world identity is application-defined.
+
+- **Roles, affiliation, delegation, multi-signature.** Reserved for future versions (§4.5).
+
+### §1.5 Notational conventions
+
+Byte-level fields are little-endian unless explicitly noted. All hashes are SHA-256 (FIPS 180-4) unless otherwise specified. All signatures are Ed25519 (RFC 8032, PureEdDSA per §3.2) unless a registered alternative algorithm is used (§3.3).
 
 Public keys are 32-byte Ed25519 encoded points. Signatures are 64 bytes. Byte concatenation is denoted `||`.
 
-Integer enum values are stable: once a value is assigned an integer position in the registries at §9.2 through §9.4, that position does not change. Renames of the string label are permitted; renumbering is not.
-
-### §1.5 Non-transferability firewall (required)
-
-> Attestations MUST NOT be transferable between keys. Implementations MUST NOT wrap attestations in fungible tokens.
->
-> Any conversion of attestation-derived standing into transferable value (governance weight, token allocations, service tiers, tradeable badges, or equivalent) MUST be publicly documented, versioned, and referenceable by URI. The documentation MUST specify:
->
-> - **(a)** the inputs from the attestation graph consumed by the conversion,
-> - **(b)** the output value form,
-> - **(c)** any subjective or off-chain inputs to the function, and
-> - **(d)** the effective date of the current version.
-
-**Rationale.** Attestations derive their value from being witnessed statements, not tokens. A witness stakes their standing on the truth of a claim; if standing could be sold, the stake disappears and the claim becomes noise. The non-transferability requirement is not a philosophical preference. It is what makes the entire graph legible. The transparency requirement makes the constraint enforceable: without it, an implementation could convert standing into transferable value opaquely and preserve the letter of §1.5 while violating its spirit.
-
-Implementations MAY produce derived signals from the attestation graph (rankings, scores, tiers, indices) and MAY exchange those signals for value, provided (a) the derivation function is documented per this section and (b) the derived signal itself is not presented as an attestation.
+Integer positions in the registries at §9.2 through §9.4 are stable across versions: once assigned, a position does not change. String labels for registered values may be renamed; integer values may not be renumbered.
 
 ---
 
@@ -102,162 +84,139 @@ An attestation record is a tuple with the following fields:
 
 | Field | Type | Length | Description |
 |---|---|---|---|
-| `spec_version` | u16 little-endian | 2 bytes | The specification version this attestation is signed against. See §3.1. |
+| `spec_version` | u16 little-endian | 2 bytes | Specification version this attestation is signed against. See §3.1. |
 | `signer` | Ed25519 public key | 32 bytes | Produced the signature. See §3. |
 | `subject` | pubkey or content hash | 32 bytes | Entity being attested about. See §2.6. |
 | `activity_type` | URI (UTF-8) | variable | Names the class of claim. See §2.2. |
 | `data_hash` | SHA-256 | 32 bytes | Hash of the canonical payload. See §2.3–§2.4. |
-| `witness_for` | pubkey OR 32 zero bytes | 32 bytes | Optional endorsement target. See §2.6. |
+| `witness_for` | pubkey OR 32 zero bytes | 32 bytes | Optional pointer to another party's claim. See §2.6. |
 | `source_hash` | SHA-256 or 32 zero bytes | 32 bytes | Hash of the canonical source identifier. See §2.4–§2.5. |
 | `source_type` | u16 little-endian | 2 bytes | The kind of source. See §2.5, §9.2. |
-| `confidence` | u16 little-endian | 2 bytes | Signer's confidence estimate, 0–10000 bps. See §2.5. |
-| `witnessing_depth` | u8 | 1 byte | The epistemic depth of the witnessing act. See §2.5, §9.3. |
+| `confidence` | u16 little-endian | 2 bytes | Signer's confidence estimate, 0–10000 basis points. See §2.5. |
+| `witnessing_depth` | u8 | 1 byte | Depth of the witnessing act. See §2.5, §9.3. |
 | `attestor_relationship` | u8 | 1 byte | Signer's relationship to the subject. See §2.5, §9.4. |
-| `created_at` | int64 Unix seconds | 8 bytes | When the attestation was signed. See §2.7. |
+| `signer_asserted_at` | int64 Unix seconds | 8 bytes | When the signer claims to have signed. See §2.7. |
 | `retention_hint` | int64 | 8 bytes | Payload retention hint. See §2.7. |
-| `nonce` | opaque 32 bytes | 32 bytes | Deterministic uniqueness. See §3.4. |
+| `nonce` | opaque 32 bytes | 32 bytes | Per-attestation uniqueness. See §3.4. |
 | `signature` | Ed25519 signature | 64 bytes | Over canonical bytes. See §3.1. |
 
-This tuple is the canonical form of an attestation. Serialization for storage and transport is implementation-defined; a conforming implementation MUST be able to reconstruct the canonical byte sequence (§3.1) from stored data in order to verify the signature.
+Serialization for storage and transport is implementation-defined. A conforming implementation MUST be able to reconstruct the canonical byte sequence (§3.1) from stored data.
 
-Not signed over, but required for a complete storage record: `payload` (whose hash is `data_hash`) and any off-chain metadata annotations (see §2.8).
+Not signed over but required in a complete record: the `payload` (whose hash is `data_hash`) and any off-chain metadata annotations (see §2.8).
 
 ### §2.2 Activity type namespacing
 
 An `activity_type` is a URI naming the class of claim being made. The URI MUST be:
 
-- absolute (not relative);
-- resolvable, in principle, to a schema document describing the payload structure; and
-- stable, meaning implementations MUST NOT change the meaning of an existing URI. A schema evolution requires a new URI (typically a version suffix, e.g., `.../v2/contribution`).
+- absolute (including scheme);
+- resolvable in principle to a schema document describing the payload structure;
+- stable, meaning implementations MUST NOT change the meaning of an existing URI. Schema evolution requires a new URI, typically with a version segment.
 
 Examples of well-formed activity types:
 
-- `work.extol.attestation/v1/contribution`
-- `sworn.dev/validator/v1/block-building-disclosure`
-- `https://schemas.example.org/hr1/statement-of-service`
+- `https://schemas.example.org/statement-of-service/v1`
+- `https://credit.niso.org/contributor-roles/writing-original-draft/`
 
-Namespace prefixes MAY be reverse-DNS style (`org.example.foo`) or URL-style (`https://example.org/foo`). Both are canonical URIs after Unicode NFC normalization and produce identical signing behavior (§2.4).
+Namespace prefixes MAY be URL-style. Reverse-DNS style (`org.example.foo`) is permitted as a URI scheme identifier where the receiving implementation registers such a scheme; conforming implementations without such a registration MUST reject reverse-DNS strings that lack a scheme.
 
-**Extension mechanism.** Any party MAY define a new activity type by publishing a schema at the URI. There is no central registry for activity types in v0.1; a signer's willingness to use an activity type and a verifier's willingness to interpret it are the coordination mechanism. Reserved namespaces documented in §9.1 exist to promote interoperability, not to constrain implementers.
+**Extension.** Any party MAY define a new activity type by publishing a schema at the URI. There is no central registry in v0.2; §9.1 documents namespaces already in use so implementers can avoid collision. Willingness of a signer to use an activity type and willingness of a verifier to interpret it are the coordination mechanism.
 
-**Adopting established vocabularies.** Where an established vocabulary already exists for a domain, implementations SHOULD adopt it rather than mint a parallel namespace. Established vocabularies enable cross-implementation legibility without requiring coordination between implementers. See §9.1 for reserved namespaces, including the CRediT contributor role taxonomy (research contributions), Extol's application vocabulary (community activity), and space for W3C Verifiable Credentials and Open Badges to be registered as adopters emerge.
-
-**Extol namespace grandfathering (informative).** For continuity with the first production adopter (Extol, Inc.), the following activity types are reserved under `work.extol.attestation/v1/`:
-
-`participation`, `contribution`, `journal-digest`, `vote-participation`, `proposal-creation`, `event-organizing`, `group-founding`, `delegation`.
-
-These reservations do not imply that any other implementation MUST support them. Non-Extol implementations MAY treat them as opaque URIs.
+**Established vocabularies.** Where an established vocabulary already exists for a domain (for example, the CRediT contributor role taxonomy for research contributions, defined by ANSI/NISO Z39.104-2022), implementations SHOULD adopt it rather than mint a parallel namespace.
 
 ### §2.3 Canonical JSON encoding for the semantic payload
 
-The payload of an attestation (the semantic content being witnessed) is a JSON object whose shape is defined by the activity type's schema. For the payload to be hashable in a deterministic, cross-implementation manner, it MUST be canonicalized before hashing.
-
-Canonicalization procedure follows RFC 8785 (JSON Canonicalization Scheme):
+The payload is a JSON object whose shape is defined by the activity type's schema. For the payload to be hashable in a deterministic, cross-implementation manner, it MUST be canonicalized before hashing per RFC 8785 (JSON Canonicalization Scheme):
 
 1. Encode all strings as UTF-8 with Unicode NFC normalization.
-2. Sort all object keys lexicographically by their UTF-16 code units.
+2. Sort object keys lexicographically by their UTF-16 code units.
 3. Serialize numbers per RFC 8785 §3.2.2.3.
 4. Emit no insignificant whitespace.
-5. Represent booleans as `true` / `false`, and null as `null`.
+5. Represent booleans as `true` / `false` and null as `null`.
 
-Implementations MUST produce identical bytes for identical semantic payloads, regardless of the language, library, or platform used.
+Implementations MUST produce identical bytes for identical semantic payloads regardless of language, library, or platform.
 
 ### §2.4 activity_hash, data_hash, and source_hash primitives
 
-Three hashes appear in the canonical byte sequence for signing:
+Three hashes appear in the canonical byte sequence:
 
-- **`activity_hash`** (32 bytes, derived not stored separately): `SHA-256(UTF-8 bytes of the activity_type URI, after Unicode NFC normalization)`. This gives a fixed-length representation of the variable-length activity type URI. Implementations that store the URI need not store this hash; they derive it on demand.
+- **`activity_hash`** (32 bytes, derived not stored separately): `SHA-256(UTF-8 bytes of the activity_type URI, after Unicode NFC normalization)`. Implementations that store the URI derive this hash on demand.
 
-- **`data_hash`** (32 bytes): `SHA-256(canonicalized JSON payload)` per §2.3. This commits to the semantic content of the attestation without requiring the payload to be transmitted, stored publicly, or preserved indefinitely.
+- **`data_hash`** (32 bytes): `SHA-256(canonicalized JSON payload)` per §2.3.
 
-- **`source_hash`** (32 bytes): `SHA-256(canonical source identifier)` per §9.2's per-source-type canonicalization rules. This commits to the specific external source the signer relied on.
+- **`source_hash`** (32 bytes): `SHA-256(canonical source identifier)` per §9.2's per-source-type canonicalization rules.
 
-**Sourceless attestations (normative).** When `source_type ∈ {0, 1}` (that is, `unknown` or `self_reported`), `source_hash` MUST be exactly 32 zero bytes. Signers MUST NOT populate `source_hash` for sourceless attestations. Verifiers MUST reject any attestation whose `source_type` is `unknown` or `self_reported` and whose `source_hash` is not 32 zero bytes; such attestations are malformed at Layer 1 and fail verification independently of signature validity.
+**Sourceless attestations.** When `source_type ∈ {0, 1}` (`unknown` or `self_reported`), `source_hash` MUST be exactly 32 zero bytes. Signers MUST NOT populate `source_hash` for sourceless attestations. Verifiers MUST reject any attestation whose `source_type` is 0 or 1 but whose `source_hash` is nonzero.
 
-Implementations MUST use SHA-256 for all three. Additional hash algorithms may be registered in future versions of this specification.
+### §2.5 Provenance fields
 
-**Cross-implementation source identity.** For two attestations from different implementations to correctly cross-reference the same source, both implementations MUST use the same canonicalization rule for that source type. The rules are registered in §9.2 alongside the source_type enum values. Where §9.2 specifies a canonicalization procedure as `MUST`, deviation breaks cross-implementation graph analysis. Where §9.2 specifies a procedure as `SHOULD` (typically for source types with no external canonical form, such as `computed` or `system_observed`), implementations MAY adopt implementation-defined canonicalization but SHOULD NOT expect cross-implementation source-identity matches.
+The four provenance fields (`source_type`, `source_hash`, `confidence`, `witnessing_depth`, `attestor_relationship`) commit the signer's claim about the origin and method of the attestation. Registered values are in §9.2 through §9.4.
 
-### §2.5 Provenance fields (required)
+**`source_type`** (u16) identifies the kind of source. Sixteen values are registered as of v0.1.1 (positions 0 through 15). Additions are additive and do not advance `spec_version`.
 
-Five fields commit the signer's provenance claim to the canonical byte sequence: `source_hash`, `source_type`, `confidence`, `witnessing_depth`, and `attestor_relationship`. These fields together separate *what the signer relied on* from *how the signer relied on it*, giving verifiers two orthogonal dimensions to reason about the claim's basis.
+**`source_hash`** (32 bytes) identifies the specific source per §2.4.
 
-The full list of registered values for each enum is in §9.2 (source_type), §9.3 (witnessing_depth), and §9.4 (attestor_relationship). Integer positions are stable across versions (§1.4).
+**`confidence`** (u16) is the signer's estimate in basis points from 0 to 10000. A value of 10000 means "as confident as I can be given this source." A value of 0 means "I have no confidence in this claim." Confidence is a snapshot at signing time; it MUST NOT be revised in place. A signer who later learns their claim was weaker SHOULD issue a new attestation with corrected confidence, using the additive-attestation pattern of §4.3.
 
-**`source_type`** (u16) identifies the kind of source the signer relied on. Sixteen values are registered as of v0.1.1, spanning self-reported claims, external authoritative sources (ORCID, DOI, git commits, OpenAlex, IRS/SEC filings, community databases like MusicBrainz), platform observations, computed assertions, references to other SWORN attestations, and OAuth-mediated identity (GitHub, LinkedIn, Google, ORCID direct). Additions are additive and do not advance `spec_version`.
+**`witnessing_depth`** (u8) captures the depth of the witnessing act itself, orthogonal to source type. Six values are registered.
 
-**`source_hash`** (32 bytes) identifies the specific source. It is `SHA-256` of the canonical source identifier per §9.2. When `source_type` is `unknown` or `self_reported`, `source_hash` MUST be 32 zero bytes.
+**`attestor_relationship`** (u8) captures the signer's relationship to the subject at signing time. Seven values are registered. This is a snapshot; changes in relationship over time do not retroactively alter signed attestations.
 
-**`confidence`** (u16) is the signer's estimate of the claim's confidence, in basis points from 0 to 10000. A value of 10000 means "as confident as I can be given this source." A value of 0 means "I have no confidence in this claim." Confidence is scalar in v0.1; per-dimension confidence (e.g., separate confidence in subject identity vs. activity participation) is deferred to a future version (see [OPEN_QUESTIONS.md](./OPEN_QUESTIONS.md)).
+#### §2.5.1 Signer's claim, not verifier's guarantee
 
-**Confidence is a signer's snapshot at the moment of signing.** Confidence MUST NOT be revised in place. If a signer later learns their claim was weaker than they originally estimated (for example, an ORCID identifier collision surfaces during dedup), the signer MUST issue a new attestation with the corrected confidence, using the additive-attestation pattern that applies to revocation. Implementations MUST NOT mutate the `confidence` field of a stored attestation.
+Provenance fields express the signer's claim about the source and method. A verifier receiving an attestation with `source_type = orcid` and `confidence = 9500` MUST treat this as the signer's assertion, not the verifier's guarantee. Independent verification of high-confidence sources is a verifier-side responsibility, not a spec-level requirement.
 
-**`witnessing_depth`** (u8) captures the epistemic depth of the witnessing act itself, orthogonal to source_type. Six values are registered. An ORCID-sourced attestation with `computed_match` depth (a machine matched a name and institution) is a fundamentally different trust artifact than a peer-witnessed attestation with `physically_observed` depth (a person was in the room), even if both are legitimate.
+Implementations MUST NOT reject attestations solely because their provenance is not independently verifiable. Confidence-based reader-side heuristics are implementation-defined.
 
-**`attestor_relationship`** (u8) captures the signer's relationship to the subject at the moment of signing. Seven values are registered. This field is a snapshot; a signer's relationship to a subject may change over time (a coordinator steps down, an institution's association ends), but the signed attestation preserves the relationship at signing time.
+#### §2.5.2 Dedup semantics
 
-The `institution` value (attestor_relationship = 6) includes automated ingestion pipelines: when an Extol Cortex worker signs an attestation on behalf of the platform, `attestor_relationship = institution` is appropriate. This clarifies that the field describes the *role* of the signing party, not necessarily a human presence.
+Two attestations sharing the same `(subject, activity_hash, data_hash)` but differing in `signer`, `source_hash`, or `source_type` are independent corroborations. Implementations MUST NOT treat them as duplicates.
 
-#### §2.5.1 Signer's claim, not verifier's guarantee (required)
+Two attestations sharing `(subject, activity_hash)` but with different `data_hash` values are not necessarily contradictions. They are attestations about the same subject and activity type with different payload content.
 
-> Provenance fields express the signer's claim about the source and method. A verifier receiving an attestation with `source_type = orcid` and `confidence = 9500` MUST treat this as the signer's assertion, not the verifier's guarantee. Independent verification of high-confidence sources (public APIs, resolvable DOIs, git commit hashes) is a verifier-side responsibility, not a spec-level requirement.
->
-> Implementations MUST NOT reject attestations solely because their provenance is not independently verifiable. Confidence-based reader-side heuristics (weighting, filtering, tier assignment) are implementation-defined. A signer's claim to have relied on ORCID does not become invalid because the verifier cannot reach the ORCID API at query time. Payload URL availability, source URL availability, and external database availability are NOT signature-verification concerns; they are graph-analysis concerns handled at reader-side heuristic layers.
-
-**Rationale.** SWORN's separation of claim from guarantee is what allows the graph to include self-reported claims alongside cryptographically-anchored ones. A low-confidence self-report is still a valid attestation; its weakness is legible via `confidence` and `witnessing_depth`, not by exclusion. Rejecting unverifiable provenance at the signature layer would collapse the whole class of legitimate self-reports the graph is designed to accept.
-
-#### §2.5.2 Dedup semantics (required)
-
-Two attestations that share the same `subject + activity_hash + data_hash` but differ in `signer`, `source_hash`, or `source_type` are independent corroborations. Implementations MUST NOT treat them as duplicates. A verifier walking the graph SHOULD interpret them as multiple parties (or a single party from multiple sources) making the same claim.
-
-Two attestations that share `subject + activity_hash` but have different `data_hash` values are not necessarily contradictions. They are attestations about the same subject and activity type with different payload content. Interpretation is graph-analysis territory.
-
-Reference-attestations (patterns such as `activity_type = correction | dispute | supersession` with `subject` pointing at another attestation's identifier) are addressed at the application layer, not in SWORN core. Implementations that adopt such conventions render the reference graph cleanly; implementations that do not still see the raw edges and can reason about them however they choose.
+Reference attestations (patterns such as `activity_type = correction | dispute | supersession` with `subject` pointing at another attestation's identifier) are addressed at the application layer.
 
 ### §2.6 Subject and witness_for fields
 
 The **`subject`** field is 32 bytes interpreted as one of:
 
 - an Ed25519 public key of another SWORN signer;
-- a content hash (32 bytes of hash output, per the activity type's schema);
+- a content hash;
 - an equivalent 32-byte identifier defined by the activity type's schema.
 
-The interpretation is activity-type-defined and MUST be documented in the activity type's schema.
+The interpretation MUST be documented in the activity type's schema.
 
-The **`witness_for`** field is always present in the canonical byte sequence (§3.1) and carries one of:
+The **`witness_for`** field is always present in the canonical byte sequence and carries one of:
 
-- **32 zero bytes:** the attestation stands alone. The signer is making a first-order claim about the subject.
-- **a 32-byte pubkey or content hash:** the attestation endorses or witnesses a specific other party's claim.
+- **32 zero bytes:** the attestation makes a first-order claim about the subject.
+- **a 32-byte pubkey or content hash:** the attestation names another party's claim.
 
-`witness_for` enables a signer to say "I saw X's attestation about Y and I corroborate it," without requiring the two-layer role machinery reserved for future versions. Semantics beyond "this signer corroborates that party's claim about this subject" are activity-type-defined.
+`witness_for` is a pointer, not a protocol operation. The referenced party does not sign anything as a consequence of being named. Applications that need cryptographic corroboration compose independent attestations per §2.5.2.
 
-### §2.7 Timestamp and retention_hint
+### §2.7 Timestamps and retention_hint
 
-The **`created_at`** field is a Unix epoch timestamp in seconds (int64), representing when the signer produced the attestation. Signers MUST NOT backdate attestations. Verifiers MAY reject attestations whose `created_at` is more than 300 seconds in the future relative to their local clock, to account for clock skew.
+The **`signer_asserted_at`** field is a Unix epoch timestamp in seconds (int64) representing when the signer claims to have signed. Signers MUST NOT populate future timestamps beyond clock-skew tolerance; verifiers MAY reject attestations whose `signer_asserted_at` exceeds their local clock by more than 300 seconds.
+
+**Substrate time is authoritative for recency and seniority.** Where an attestation has been notarized (Layer 4), the substrate-published timestamp (§5.1) is the authoritative time for questions of when the attestation entered the record. `signer_asserted_at` is the signer's claim; the substrate timestamp is the notary's observation. Verifiers reasoning about "when did X happen" for a notarized attestation MUST use the substrate timestamp.
 
 The **`retention_hint`** field is an int64 encoding the signer's intent regarding payload storage duration:
 
-- **`retention_hint > 0`:** Unix epoch seconds after which the payload MAY be discarded by any party storing it. The hash on the ledger remains durable; the payload is not guaranteed to be retrievable after this time.
-- **`retention_hint == 0`:** no expiry intent expressed; the implementation-defined default applies.
-- **`retention_hint == -1`:** the signer intends the payload to be preserved indefinitely (subject to any implementation's storage limitations).
+- **`> 0`:** Unix epoch seconds after which the payload MAY be discarded by any party storing it.
+- **`== 0`:** no expiry intent expressed; the implementation default applies.
+- **`== -1`:** the signer intends the payload to be preserved indefinitely subject to storage limitations.
 
-Retention is a hint, not a guarantee. Verifiers MUST NOT assume payload availability at any future time. The on-chain hash remains verifiable regardless of payload availability (§5.4).
+Retention is a hint, not a guarantee. The notary hash remains verifiable regardless of payload availability (§5.4).
 
-Implementations MAY offer different retention hints as a service tier. If they do, the tiering scheme is subject to §1.5's transparency requirement to the extent that retention differences are exchanged for value.
+### §2.8 Source license and off-chain metadata
 
-### §2.8 Source license and off-chain metadata (required)
+Where an attestation's source carries license terms (Creative Commons on an ORCID record, an open-source license on a git commit, terms-of-service on a platform-recorded event), those terms bind the referenced content and any downstream use of it. License terms are NOT part of the canonical byte sequence.
 
-> Where an attestation's source (as identified by `source_hash` and `source_type`) carries license terms, for example a Creative Commons license on an ORCID record, an open-source license on a git commit, or terms-of-service on a platform-recorded event, those terms bind the attestation and any downstream use of the referenced content. License terms are NOT signed over as part of the canonical byte sequence because they are external, mutable, and updateable by the source.
->
-> Implementations MUST preserve license information alongside the attestation record as retrievable metadata, and MUST propagate that information to any verifier they disclose the attestation to. Implementations MUST NOT strip or replace license information when re-emitting attestations.
->
-> Signing over the license would have created ambiguity about whether the attestation itself is subject to that license; the split preserves the discipline that a citation carries a reference, not the licensed content.
+Implementations MUST preserve license information alongside the attestation record and MUST propagate it to any verifier they disclose the attestation to. Implementations MUST NOT strip or replace license information when re-emitting attestations.
 
-Implementations SHOULD preserve license information as a triple of `(source_hash, license_identifier, license_effective_range)` rather than as a single mutable field. Source terms change over time (StackOverflow license disputes, GitHub TOS updates, individual OpenAlex-aggregated sources with varying terms); preserving effective-range makes the audit question "was this attestation ingested when the source was still redistributable?" answerable.
+Implementations SHOULD store license information as a triple of `(source_hash, license_identifier, license_effective_range)` so that changes in source terms over time remain auditable.
 
-Similarly, `quality_flags` (a signer's annotations of claim weaknesses known at attestation time) are NOT signed over, but implementations SHOULD store them alongside the attestation and MUST NOT strip them when re-emitting. Signing over quality flags would have required signers to predict future flag taxonomies; the additive metadata layer allows the flag vocabulary to evolve without breaking signatures.
+`quality_flags` (a signer's annotations of known claim weaknesses) are also NOT signed over. Implementations SHOULD store them alongside the attestation and MUST NOT strip them.
 
-Implementations SHOULD distinguish provenance produced *at the time of the original attestation* from provenance *backfilled during migration*, via an off-chain `provenance_origin` flag (`original` or `backfilled`). Backfilled provenance is honest data with a different epistemic status than original provenance and should be inspectable as such.
+Implementations SHOULD distinguish provenance produced at the original signing from provenance backfilled during migration via an off-chain `provenance_origin` flag (`original` or `backfilled`).
 
 ---
 
@@ -269,269 +228,256 @@ Every signature covers the following byte sequence, in this order:
 
 ```
 canonical_bytes =
-      spec_version         (2 bytes, u16 little-endian)   -- per §3.1.1
+      spec_version         (2 bytes, u16 little-endian)
    || signer               (32 bytes)
    || subject              (32 bytes)
-   || activity_hash        (32 bytes)   -- per §2.4
-   || data_hash            (32 bytes)   -- per §2.4
-   || witness_for          (32 bytes)   -- per §2.6
-   || source_hash          (32 bytes)   -- per §2.4, §2.5
-   || source_type          (2 bytes, u16 little-endian)   -- per §2.5, §9.2
-   || confidence           (2 bytes, u16 little-endian)   -- per §2.5
-   || witnessing_depth     (1 byte, u8)                   -- per §2.5, §9.3
-   || attestor_relationship (1 byte, u8)                  -- per §2.5, §9.4
-   || created_at           (8 bytes, int64 little-endian) -- per §2.7
-   || retention_hint       (8 bytes, int64 little-endian) -- per §2.7
-   || nonce                (32 bytes)                     -- per §3.4
+   || activity_hash        (32 bytes)
+   || data_hash            (32 bytes)
+   || witness_for          (32 bytes)
+   || source_hash          (32 bytes)
+   || source_type          (2 bytes, u16 little-endian)
+   || confidence           (2 bytes, u16 little-endian)
+   || witnessing_depth     (1 byte, u8)
+   || attestor_relationship (1 byte, u8)
+   || signer_asserted_at   (8 bytes, int64 little-endian)
+   || retention_hint       (8 bytes, int64 little-endian)
+   || nonce                (32 bytes)
 ```
 
-Total length: **248 bytes** (2 + 32 × 6 + 2 × 2 + 1 × 2 + 8 × 2 + 32).
+Total length: **248 bytes**.
 
-Implementations MUST construct this exact byte sequence and MUST NOT include additional fields, framing, prefix bytes beyond `spec_version`, or other version markers in the signed content. Additional metadata that an implementation wishes to include in its storage or transport layer MUST NOT enter the canonical byte sequence, otherwise cross-implementation verification breaks.
+Implementations MUST construct this exact byte sequence and MUST NOT include additional fields, framing, prefix bytes beyond `spec_version`, or version markers in the signed content. Additional metadata that an implementation stores or transports MUST NOT enter the canonical byte sequence.
 
 The signature is `signature = Ed25519.sign(signer_privkey, canonical_bytes)` per §3.2, or the equivalent for a registered alternative algorithm (§3.3).
 
 #### §3.1.1 spec_version marker
 
-The `spec_version` field is a u16 (little-endian) at the start of the canonical byte sequence. Registered values:
+`spec_version` (u16 little-endian) is the first two bytes of the canonical byte sequence.
 
 | Value | Version | Status |
 |---|---|---|
-| 1 | v0.1-preview | Deprecated. Historical rows only. New attestations MUST NOT use this value. |
-| 2 | v0.1-final | Current. All new attestations MUST use this value. |
+| 1 | v0.1-preview | Deprecated. New attestations MUST NOT use this value. |
+| 2 | v0.1-final | Deprecated. New attestations MUST NOT use this value. |
+| 3 | v0.2 | Current. All new attestations MUST use this value. |
 
-A verifier receiving an attestation MUST inspect `spec_version` first and dispatch to the correct canonical-byte-sequence layout for that version. Verifiers MUST reject attestations with `spec_version` values they do not recognize as unverifiable (distinct from malformed) and SHOULD report a version-mismatch error rather than a signature-failure error, so implementers can distinguish "reader is behind the registry" from "attestation is corrupt."
+A verifier MUST inspect `spec_version` first and dispatch to the correct canonical-byte-sequence layout. Verifiers MUST reject attestations with unknown `spec_version` values as unverifiable, distinct from malformed, and SHOULD report the version-mismatch condition so implementers can distinguish "reader is behind the registry" from "attestation is corrupt."
 
-Any subsequent breaking change to the canonical byte sequence (new fields, algorithm changes, layout reorderings) advances `spec_version` and reserves a new integer value here. Additive changes that do not alter existing bytes (registration of new source_type values, new activity types) do NOT advance `spec_version`.
+Any change to the canonical byte layout advances `spec_version` and reserves a new integer here. Additive registry additions (new source_type values, new activity types) do NOT advance `spec_version`.
 
 #### §3.1.2 Verification procedure
 
 1. Read `spec_version` from the stored attestation. Dispatch to the correct canonical-byte-sequence layout.
-2. Reconstruct `canonical_bytes` from the stored attestation per that layout.
+2. Reconstruct `canonical_bytes` from the stored fields per that layout.
 3. Verify `signature` against `canonical_bytes` using `signer` as the public key, per RFC 8032 §5.1.7.
-4. If step 3 succeeds, the attestation is *authentic*: the holder of the `signer` private key produced this exact byte sequence.
+4. If step 3 succeeds, the attestation is authentic: the holder of the `signer` private key produced this exact byte sequence.
 
-Verification per §3.1 does NOT establish that any given payload matches `data_hash`, nor that any given source matches `source_hash`. To verify the payload, the verifier MUST also compute `SHA-256(canonicalize(payload)) == data_hash` per §2.3–§2.4. To verify the source claim, the verifier MAY consult the external source per §2.5.1 (this is optional and implementation-defined).
+Verification does not by itself establish that any given payload matches `data_hash` or that any given source matches `source_hash`. To verify the payload, the verifier MUST also compute `SHA-256(canonicalize(payload))` and compare against `data_hash`.
 
-### §3.2 Ed25519 (mandatory-to-implement)
+### §3.2 Ed25519 (mandatory)
 
-Every conforming implementation MUST support Ed25519 signing and verification per RFC 8032, with the following parameter choices:
+Every conforming implementation MUST support Ed25519 per RFC 8032:
 
-- Curve: Ed25519 (edwards25519), per RFC 8032 §5.1.
-- Key encoding: 32-byte public key, 32-byte private seed, 64-byte signature.
-- Message: the 248-byte `canonical_bytes` sequence from §3.1 (for `spec_version = 2`), passed to `Ed25519.sign` without pre-hashing (i.e., PureEdDSA per RFC 8032 §5.1, not Ed25519ph).
+- Curve: Ed25519 (edwards25519), RFC 8032 §5.1.
+- Encoding: 32-byte public key, 32-byte private seed, 64-byte signature.
+- Signing message: the 248-byte `canonical_bytes` sequence, passed to `Ed25519.sign` without pre-hashing (PureEdDSA per RFC 8032 §5.1, not Ed25519ph).
 
 Implementations MUST use PureEdDSA. Implementations MUST NOT use Ed25519ph.
 
 ### §3.3 Signature algorithm extension mechanism
 
-Future versions of this specification MAY register additional signature algorithms in §9.5. For v0.1, only Ed25519 is defined. Any implementation that encounters an attestation whose algorithm is not Ed25519 MUST reject it as unverifiable. Implementations MUST NOT pass such attestations through as verified.
+Ed25519 is the sole algorithm in v0.2. Future versions MAY register additional algorithms in §9.5. Any implementation that encounters an attestation whose algorithm is not Ed25519 MUST reject it as unverifiable.
 
-Because v0.1 defines a single algorithm, no algorithm identifier appears in the canonical byte sequence beyond `spec_version`. Future versions that add algorithms will advance `spec_version` and either introduce an algorithm identifier byte or specify the algorithm implicitly per version. Implementations MUST NOT invent algorithm identifier bytes on their own.
+Adding an algorithm requires advancing `spec_version` and either introducing an algorithm identifier byte in the canonical sequence or specifying the algorithm implicitly per version. Implementations MUST NOT invent algorithm identifier bytes on their own.
 
-### §3.4 Replay protection (nonce derivation)
+### §3.4 Nonce (per-attestation uniqueness)
 
-The **`nonce`** field is a 32-byte value present in the canonical byte sequence (§3.1) that ensures a signer producing two attestations with otherwise identical fields still produces two distinct signatures over two distinct byte sequences.
+The **`nonce`** field is a 32-byte value ensuring that a signer producing two attestations with otherwise identical fields still produces two distinct signatures over two distinct canonical byte sequences.
 
-The nonce is REQUIRED. The method used to derive it is implementation-defined, subject to the following required properties:
+The nonce is REQUIRED. It MUST satisfy:
 
-- **Uniqueness.** The nonce MUST be unique per `(signer, subject, activity_hash)` tuple over the practical lifetime of the signing key. Two attestations by the same signer, about the same subject, of the same activity type, MUST NOT share a nonce.
-- **Derivation mode.** The nonce MAY be deterministic (e.g., a hash of implementation-defined uniqueness inputs) or random (e.g., 32 cryptographic-random bytes). Determinism is preferable when idempotent re-derivation is desired.
-- **Unpredictability.** An attacker who observes a stream of a signer's attestations SHOULD NOT be able to predict the nonce of the next attestation. Nonces MUST NOT be sequential counters visible to third parties.
+- **Uniqueness per attestation.** Any two attestations produced by the same signer over the same subject with different payload content MUST have different nonces. This is required because §2.5.2 makes multiple same-signer, same-subject, same-activity attestations with different `data_hash` values first-class.
+- **Unpredictability.** An attacker observing a stream of a signer's attestations SHOULD NOT be able to predict the nonce of the next attestation. Nonces MUST NOT be sequential counters visible to third parties.
 
-**Reference derivation (non-normative).** The Extol implementation derives nonces as:
+**Reference derivation (non-normative).**
 
 ```
-nonce = SHA-256(signer || subject || activity_hash || implementation_scope_id)
+nonce = SHA-256(signer || subject || activity_hash || data_hash || salt_32)
 ```
 
-where `implementation_scope_id` is a 32-byte value derived from community and rotation-epoch context. This is presented as an example. Other implementations MAY choose different derivations.
+where `salt_32` is a 32-byte value the signer holds and rotates. This derivation is deterministic for a given `(signer, subject, activity_hash, data_hash, salt_32)` tuple, produces distinct nonces for distinct payloads, and does not leak the pattern of the signer's activity as long as `salt_32` remains private.
 
-### §3.5 Key rotation considerations (non-normative)
+Other derivations are acceptable provided they meet the two required properties. Purely random nonces (32 cryptographic-random bytes) satisfy both requirements trivially.
 
-A signer's public key is expected to persist for the lifetime of the standing accrued to it. Rotation is possible but expensive: rotating a key requires either
+### §3.5 Key rotation (non-normative)
 
-- (a) publishing a signed statement from the old key delegating to a new key (a pattern reserved for future versions of this specification), or
-- (b) accepting that standing accrued to the old key does not transfer.
+A signer's public key is expected to persist for the lifetime of the attestations produced under it. Rotation requires either:
 
-Implementations that wish to hide the signing key from their users (e.g., using KMS or hardware-backed derivation) MAY do so. The private-key material MAY be re-derivable from a seed rather than stored. The mechanism used to generate keys is out of scope for this specification, provided the resulting signatures verify per §3.1–§3.2.
+- publishing a signed statement from the old key delegating to a new key (a pattern reserved for a future version); or
+- accepting that attestations produced under the old key remain bound to the old key.
 
-For v0.1, implementations SHOULD assume signer keys are long-lived. Future versions will define required rotation patterns.
+Implementations that hide the signing key from users (KMS, hardware-backed derivation, passkey PRF-derived seeds) MAY do so provided the resulting signatures verify per §3.1–§3.2.
 
 ---
 
 ## §4 Layer 3: Registry
 
-Layer 3 defines what a signer is, how signer identity persists over time, how signers withdraw prior statements, and how the accumulated graph of attestations is interpreted as standing. It deliberately does not define roles, affiliations, delegation, or any hierarchy above the single-signer type; those are reserved for future versions (§4.5).
+Layer 3 defines what a signer is, how signer identity persists, and how signers withdraw prior statements. It deliberately does not define roles, affiliation, delegation, or hierarchy above the single-signer type; those are reserved for future versions (§4.5).
 
-### §4.1 Signer identity model (single signer type, v0.1)
+### §4.1 Signer identity
 
-A signer is a single Ed25519 public key. There is no registration step, no directory service, no central issuer, and no distinction between signer classes at the protocol layer. Any party that holds an Ed25519 private key can produce a conforming SWORN attestation; the resulting `signer` field in the canonical byte sequence (§3.1) is that private key's corresponding 32-byte public key.
+A signer is a single Ed25519 public key. There is no registration step, no directory service, and no central issuer. Any party holding an Ed25519 private key can produce a conforming SWORN attestation.
 
-Implementations MUST NOT require signer pre-registration as a condition of accepting an attestation. Rate limiting, quota enforcement, and admission control at the transport layer (§6.5) are separate concerns and MUST NOT be conflated with signer identity.
+Implementations MUST NOT require signer pre-registration as a condition of accepting an attestation. Rate limiting, quota enforcement, and admission control at the transport layer (§6.5) are separate concerns.
 
-The identity of a signer is exactly its public key. The mapping between a signer and any real-world person, organization, or automated system is implementation-defined and lives outside the protocol. Implementations that wish to associate signers with human-readable labels, verified identities, or organizational affiliations MAY do so in an off-chain metadata layer, subject to the transparency requirement of §1.5 where such labels are used to convert standing into value.
+The identity of a signer is exactly its public key. Any binding to a real-world person or organization is application-defined.
 
 ### §4.2 Persistent key semantics
 
-Signer identity persists exactly as long as the signer's private key persists. Two attestations bearing the same `signer` value are, at the protocol layer, produced by the same signer regardless of when they were signed or by what implementation. This is the primitive that makes standing accumulate across time and across implementations.
+Signer identity persists exactly as long as the signer's private key persists. Two attestations bearing the same `signer` value are, at the protocol layer, produced by the same signer regardless of when they were signed.
 
-Implementations MUST NOT treat the same `signer` public key as two distinct signers under any circumstance. Implementations MAY offer signers a mechanism to label themselves (display names, avatars, affiliations) but MUST NOT let such labels override the cryptographic identity of the key.
+Implementations MUST NOT treat the same `signer` public key as two distinct signers under any circumstance. Implementations MAY offer signers a mechanism to label themselves but MUST NOT let such labels override the cryptographic identity of the key.
 
-Signers MAY hold multiple distinct keys and use them in different contexts (per-community keys, per-purpose keys, disposable keys). Each key is a distinct signer at the protocol layer. Implementations MAY offer off-chain grouping ("these keys belong to the same real-world entity") but the protocol makes no such grouping.
-
-For v0.1, implementations SHOULD assume signer keys are long-lived. Formal key rotation semantics are reserved for future versions (§3.5). A signer that rotates keys today does so by starting a fresh signer identity; prior attestations under the old key remain valid but no longer accumulate standing to the new key.
+Signers MAY hold multiple distinct keys and use them in different contexts. Each key is a distinct signer at the protocol layer. Applications MAY offer off-chain grouping of keys ("these keys belong to the same real-world entity"); the protocol makes no such grouping.
 
 ### §4.3 Revocation by additive attestation
 
 SWORN has no on-chain mutation of prior attestations. Revocation is expressed by signing a new attestation that references the target.
 
-**Required convention.** An attestation whose `activity_type` URI resolves to a revocation-class schema (for example, `sworn.dev/v1/revocation`) and whose `subject` field is `SHA-256(target_canonical_bytes)` constitutes a revocation of the referenced target attestation by the signing party. The subject encoding is the same primitive used by `source_type = 14` (`external_sworn_attestation`) in §9.2, giving the whole additive-reference family (revocations, corrections, disputes, supersessions, endorsements of attestations) a single convention.
+**Required convention.** An attestation whose `activity_type` URI is `https://sworn.dev/v1/revocation` and whose `subject` is `SHA-256(target_canonical_bytes)` constitutes a revocation of the referenced target attestation by the signing party.
 
-Signers MUST populate `subject` with the exact 32-byte SHA-256 of the target's canonical byte sequence (§3.1). Implementations MUST NOT substitute other identifiers (attestation UUIDs, substrate-specific PDA addresses, human-readable labels) for `subject` in a revocation; those may live off-chain as metadata but do not participate in the cryptographic reference.
+Signers MUST populate `subject` with the exact 32-byte SHA-256 of the target's canonical byte sequence (§3.1). Implementations MUST NOT substitute other identifiers (application UUIDs, substrate-specific PDA addresses, human-readable labels) for `subject` in a revocation.
 
 Implementations MUST NOT delete, mutate, or otherwise alter the target attestation's record in response to a revocation. Both records remain durable. Verifiers walking the graph MUST see both the original attestation and any revocations of it, and MAY apply reader-side policy about how to weigh them.
 
-**Who can revoke.** Only the original signer of an attestation can revoke it in a way that discounts its standing at the reader's discretion. A revocation signed by a party other than the original signer is a first-class attestation in its own right (a "dispute" or "counter-claim") but is not a revocation of the target attestation's cryptographic validity. The original signature over the target's canonical bytes remains cryptographically valid regardless.
+**Who can revoke.** Only the original signer of an attestation can revoke it. A revocation whose signer differs from the original signer is not a revocation; it is a first-class attestation (a "dispute" or "counter-claim") that references the target but does not withdraw the target's signature.
 
-**Dangling revocations.** A verifier MUST verify the revocation's signature per §3.1's verification procedure. A verifier MAY consider a revocation "applied" only to attestations whose canonical bytes hash to the value in `subject`. Revocations whose `subject` does not match any known attestation are legitimate signed statements but have no target to apply to; verifiers SHOULD retain them (a matching attestation may surface later, having previously been unknown to that verifier) but MUST NOT apply them to non-matching attestations even when the signer of the revocation matches the signer of some other attestation.
+**Dangling revocations.** A verifier MUST verify the revocation's signature per §3.1.2. A verifier MAY consider a revocation applied only to attestations whose canonical bytes hash to the value in `subject`. Revocations with no matching target are legitimate signed statements but have no target to apply to; verifiers SHOULD retain them (a matching target may surface later) but MUST NOT apply them to non-matching attestations.
 
-**Additive-only rule.** Implementations MUST treat every revocation as an additive record in the notarization substrate. Implementations MUST NOT provide a "hard delete" or "unpublish" path at Layer 4 (§5.4). This is what makes SWORN's revocation semantics honest: a revocation is a fact about the signer's later intent, not an erasure of prior fact.
+**Additive only.** Every revocation is an additive record. Implementations MUST NOT provide a "hard delete" or "unpublish" path at Layer 4 (§5.4).
 
-**Interaction with key rotation.** Because v0.1 has no formal key rotation (§3.5), revocation requires the original signing key. If a signer has lost access to the key that produced an attestation, that attestation cannot be revoked in the v0.1 sense. The signer MAY sign a new attestation under a new key stating "I have lost control of key X and no longer stand behind attestations signed by it"; such a statement is a first-class attestation but does not carry the same weight as a same-key revocation. Formal key-compromise semantics are reserved for future versions.
+**Key rotation interaction.** Because v0.2 has no formal key rotation (§3.5), revocation requires the original signing key. A signer who has lost access to the key that produced an attestation cannot revoke that attestation in the v0.2 sense.
 
-**Query shape.** Because `subject = SHA-256(target_canonical_bytes)` is substrate-neutral and self-computing, the query "find revocations of attestation X" is `WHERE activity_type = revocation-class AND subject = SHA-256(X_canonical_bytes) AND signer = X.signer` in every implementation, without per-substrate identifier translation. Implementations MAY maintain an index on `subject` restricted to revocation-class rows for efficiency.
+### §4.4 Standing as a graph
 
-### §4.4 Standing as an emergent property of the graph
+The accumulated record of attestations by and about a signer is a graph. It is not a score, a ranking, or a value. Implementations that compute derived signals over the graph MUST NOT present those signals as attestations.
 
-Standing is the accumulated record of attestations signed by, and attestations naming, a given signer. Standing is not a score, a ranking, or a value. Standing is a graph.
+Two implementations reading the same graph MAY compute different derived signals for legitimate reasons: different weightings across `witnessing_depth` values (§9.3), different treatment of low-`confidence` self-reports (§2.5.1), different decay curves for older attestations. This is expected and healthy. Cross-implementation portability applies to the graph (identical), not to derived signals (different).
 
-**Required semantics.** Implementations MUST expose sufficient primitives at Layer 5 (§6) for a verifier to walk the graph and reason about a signer's attestation history. Implementations MUST NOT present derived signals (rankings, tier assignments, aggregate scores) as attestations. The distinction between the attestation graph (facts anyone can independently verify) and derived signals (interpretations one implementation has chosen to compute) is required by §1.5.
+Standing loss from revocation is not a spec-level mechanism. A revocation attestation (§4.3) is a fact in the graph; how much it decreases the referenced target's contribution to standing is a reader-side policy decision.
 
-**Implementation freedom.** Given the same underlying graph, two implementations MAY compute different derived signals for legitimate reasons: different thresholds for weighting peer-witnessed vs computed-match attestations (§9.3), different treatment of low-`confidence` self-reports (§2.5.1), different decay curves for older attestations. This is expected and healthy. What implementations MUST NOT do is present these interpretations as if they were themselves signed attestations.
+### §4.5 What is not in this layer
 
-**Cross-implementation portability.** Because Layer 1 (§2) fully specifies the canonical byte sequence and Layer 2 (§3) fully specifies signature semantics, any two implementations that produce or consume attestations do so against the same graph. A signer's standing, measured as raw attestation counts and relationships, is identical across implementations. Derived signals differ; the graph does not.
+The following patterns exist in real recognition systems and are explicitly out of scope for v0.2:
 
-**Emergent revocation.** Standing loss from revocation is not a spec-level mechanism. A revocation attestation (§4.3) is a fact in the graph; how much it decreases the referenced attestation's contribution to standing is a reader-side policy decision. Implementations SHOULD document their revocation-weighting policy per §1.5 where standing is converted into value.
+- Two-layer witness/certifier roles.
+- Affiliation records with revocation semantics distinct from attestation revocation.
+- Delegated attestation.
+- Multi-signature attestations. (Multiple independent signers about the same subject are already supported natively per §2.5.2.)
+- Directory or discovery services.
 
-### §4.5 What is NOT in this layer (roles, affiliation, delegation; reserved for future)
-
-The following patterns exist in real recognition systems, are named here for completeness, and are explicitly out of scope for v0.1:
-
-- **Two-layer witness/certifier roles.** A pattern where an entity (organization) endorses a persona (individual signer) and can sign entity-binding statements distinct from persona-signed statements. Requires role primitives Layer 3 v0.1 deliberately omits. Reserved for a future companion specification.
-- **Affiliation.** A signed relationship of membership between a persona and an entity, with revocation semantics distinct from attestation revocation. Requires the roles model above.
-- **Delegated attestation.** A pattern where signer A grants signer B the authority to sign on A's behalf, with revocable grant semantics. Materially expands the trust model and requires its own spec pass. Reserved for a future version.
-- **Multi-signature attestations.** An attestation requiring N-of-M signatures before it becomes valid. Distinct from independent attestations by multiple signers about the same subject (which v0.1 already supports natively via §2.5.2). Reserved for a future version.
-- **Directory or discovery services.** No spec-level mechanism for looking up a signer by name, resolving a signer to a real-world identity, or discovering signers by attribute. Implementations MAY offer such services off-chain; the protocol makes no commitment.
-
-Implementations MAY build any of these on top of v0.1's single-signer-type primitive, as application conventions in their own right. Where they do, those conventions live in implementation documentation, not in this specification.
+Implementations MAY build any of these on top of v0.2's single-signer primitive as application conventions. Where they do, those conventions live in application documentation, not in this specification.
 
 ---
 
 ## §5 Layer 4: Notarization
 
-Layer 4 defines how an attestation's cryptographic identity is committed to a public, tamper-evident ledger so that any verifier, at any later time, can confirm the attestation existed at a specific point in time. The layer is substrate-agnostic: SWORN commits only to what must be published and how it must behave, not to which system publishes it. The two live substrate bindings maintained alongside this specification (Postgres via [extol-work/sworn-postgres](https://github.com/extol-work/sworn-postgres) and Solana SAS via Extol's production implementation) are documented in Appendix A and Appendix B.
+Layer 4 defines how an attestation's cryptographic identity is committed to a public, tamper-evident ledger so that any verifier can confirm the attestation existed at a specific point in time.
 
-### §5.1 Hash-anchor commitment (required)
+**The notary in v0.2 is Solana Attestation Service (SAS).** The concrete binding, including credential and schema layout, PDA seed derivation, forbidden SAS instructions, and account data layout, is defined normatively in bindings/sas.md. The requirements in this section govern what any SAS-based notary MUST publish and MUST NOT permit; bindings/sas.md tells implementers how to satisfy them.
 
-The notarization substrate MUST publish, per attestation, at least the following:
+Non-SAS substrates do not offer Layer 4 conformance in v0.2. An implementation that produces signed attestations without notarizing them to SAS satisfies Layers 1 and 2 only; see bindings/postgres.md.
 
-- **The `data_hash`** of the attestation as defined in §2.4 (32 bytes, SHA-256).
-- **The `signer`** public key (32 bytes) OR a substrate-native identifier from which the signer public key is deterministically resolvable.
-- **A substrate-native creation timestamp** (block time, commit time, log sequence number, or equivalent) that is monotonic within the substrate and that any verifier can independently read.
+### §5.1 What the notary publishes
 
-The full 32-byte SHA-256 of the attestation's canonical byte sequence per §3.1 (denoted `attestation_hash` in the remainder of this section) is the substrate-agnostic identifier for cross-referencing an attestation from any other attestation (§2.5.2, §4.3, §9.2 source_type=14). Substrates MAY store additional attestation content on-chain (larger fields, entire canonical bytes, signature) at the implementation's discretion; substrates MUST store at least `attestation_hash` in a form the verifier can compute from the substrate's record without out-of-band information.
+For each attestation, the notary MUST publish:
 
-**Anchor-produces, does-not-attest.** A notarization substrate publishing an attestation's hash is NOT itself attesting to the content of the attestation. The substrate's role is temporal: it establishes that the hash existed at a known point in time. Interpretations of the attestation live at Layer 3 (§4.4) and are reader-side concerns.
+- **The `attestation_hash`**, defined as `SHA-256(canonical_bytes)` per §3.1.
+- **A substrate-native creation timestamp** (Solana block time) monotonic within the substrate and independently readable by any verifier.
 
-**Independent hash recomputation.** For a verifier to trust the on-chain hash, the verifier MUST be able to independently reconstruct the canonical byte sequence (§3.1) from the attestation's stored fields and compute `SHA-256(canonical_bytes)`, then confirm the result matches what the substrate published. A substrate implementation that publishes a hash the verifier cannot independently reproduce from stored source material is NOT conforming. This property is what makes the three-implementation round-trip demo (Appendix C) meaningful: each party recomputes rather than trusting upstream.
+The notary MUST NOT include, in any part of its published record that is enumerable via a public substrate query (`getProgramAccounts` scans, indexed content lookups, memcmp filters on account content, or equivalents), the following fields:
 
-**Anchoring is not signing.** The party operating the notarization substrate MAY be a different party than the signer. Any party that possesses the canonical bytes and the signer's signature can compute the attestation's hash and publish it to the substrate; the signature is not touched or replaced during anchoring. This separation is required for the "sign locally, anchor via a service" pattern common in resource-constrained clients.
+- `signer`
+- `subject`
+- `activity_type` or `activity_hash`
+- `source_hash`
+- `witness_for`
+- any deterministic encoding of the above
 
-### §5.2 Merkle batching (deferred)
+This is the discipline that keeps the notary from becoming a walkable dossier. The `attestation_hash` is opaque with respect to the fields it commits to; a scan of the substrate reveals which hashes have been published, not who signed what about whom. bindings/sas.md §3 defines the concrete SAS PDA derivation that satisfies this requirement.
 
-Batching multiple attestation hashes into a Merkle tree and anchoring only the root is a well-understood cost-reduction pattern used by several existing substrates. SWORN v0.1 deliberately does NOT specify a Merkle batching format at the protocol layer, for two reasons:
+**The notary does not attest to content.** Publishing an attestation's hash establishes that the hash existed at a known time. It does not endorse the truth of the attestation. Interpretations of the attestation live at Layer 3 (§4.4) and are reader-side concerns.
 
-1. **Implementation experience.** Extol's production Solana SAS binding uses Merkle batching as a per-tier cost optimization; sworn-postgres does not. Cross-implementation verification of batched proofs requires more design work than is warranted by two implementations, one of which does not currently need the feature.
-2. **Format lock-in risk.** Once a Merkle format is normative, changing it becomes a v1.0 breaking change (§3.3 analogy). Waiting until at least two independent implementations need it produces better format than committing early.
+**Independent hash recomputation.** For a verifier to trust the published hash, the verifier MUST be able to independently reconstruct the canonical byte sequence (§3.1) from the attestation's stored fields, compute `SHA-256(canonical_bytes)`, and confirm the result matches what the notary published. A notary implementation that publishes a hash the verifier cannot independently reproduce from stored source material is NOT conforming.
 
-**Interim guidance.** Implementations that batch (such as the Solana SAS binding documented in Appendix A) MUST anchor the resulting Merkle root as a distinct attestation-like record at Layer 4, and MUST provide off-chain inclusion proofs to verifiers on request. Inclusion proofs verified against a batched root MUST resolve to the individual attestation's `data_hash` per §5.1's independent-recomputation rule. Implementations SHOULD document their batching format in implementation notes; a normative Merkle format is reserved for v0.2.
+**Notarization is not signing.** The party operating the notary MAY be a different party than the signer. Any party holding the canonical bytes and the signer's signature can compute the attestation's hash and publish it; the signature is not touched during notarization. This separation supports the "sign locally, notarize via a service" pattern.
 
-**Cross-substrate Merkle interoperability** (a verifier holding an inclusion proof from substrate A confirming an attestation is anchored to substrate B) is out of scope for v0.1.
+### §5.2 Merkle batching
 
-### §5.3 Retention semantics (per-record, differing retention allowed)
+Some notary deployments batch attestation hashes into a Merkle tree and publish only the root as a cost optimization. SWORN v0.2 does not specify a normative Merkle format at the protocol layer.
 
-Layer 1's `retention_hint` field (§2.7) expresses the signer's intent regarding payload retention. Layer 4 governs what happens to the on-chain hash under the same hint.
+**Requirements for batching implementations.** An implementation that batches MUST anchor the resulting Merkle root as a distinct notary record satisfying §5.1 and MUST provide off-chain inclusion proofs to verifiers on request. Inclusion proofs verified against a batched root MUST resolve to the individual attestation's `SHA-256(canonical_bytes)` per §5.1's independent-recomputation rule.
 
-**Required rule.** The on-chain hash MUST remain published for at least as long as the substrate maintains any record of the attestation. Substrates MUST NOT selectively expire on-chain hashes ahead of the substrate's own record-retention policy. If a substrate deletes the record entirely (subject to substrate policy), the hash goes with it; there is no on-chain-hash-without-substrate-record state.
+Cross-notary Merkle interoperability (an inclusion proof from notary A confirming an attestation is anchored to notary B) is out of scope for v0.2. A normative Merkle format is reserved for v0.3.
 
-**Per-attestation heterogeneity.** A single notarization substrate MAY carry attestations with different `retention_hint` values, and those attestations MAY have different off-chain payload availability at any given time. A verifier MUST NOT assume all attestations in the same substrate share the same retention posture.
+### §5.3 Retention semantics
 
-**Retention is not validity.** An attestation whose `retention_hint` has passed and whose payload has been reclaimed is still a valid attestation at Layer 2. Its signature verifies. What has changed is its *disclosability* (§6): the payload may no longer be retrievable, so a verifier may see only metadata. The distinction between "invalid" and "undisclosable-but-valid" is preserved by never mutating the on-chain hash.
+Layer 1's `retention_hint` field (§2.7) expresses the signer's intent regarding payload retention. Layer 4 governs the notary hash under the same hint.
 
-### §5.4 Durability guarantees for the on-chain hash (required)
+**Required rule.** The notary hash MUST remain published for at least as long as the substrate maintains any record of the attestation. Substrates MUST NOT selectively expire notary hashes ahead of the substrate's own record-retention policy.
 
-The on-chain hash of an attestation, once published, MUST NOT be revoked, mutated, or reversed by the notarization substrate under any protocol-visible circumstance. This is the specification-level durability guarantee: a verifier reading the substrate can rely on the invariant that a hash present today was present at its published timestamp and will remain present for as long as the substrate itself exists.
+**Per-attestation heterogeneity.** A single notary substrate MAY carry attestations with different `retention_hint` values, and those attestations MAY have different off-chain payload availability at any time. A verifier MUST NOT assume all attestations in the same substrate share the same retention posture.
 
-**Substrate-level failure modes** (chain reorganizations, ledger rollbacks, database restores) are out of protocol scope. Implementations MUST document what substrate-level guarantees they provide; verifiers MAY treat attestations from substrates with weaker durability differently in reader-side heuristics. But nothing at the protocol layer permits a substrate to selectively withdraw an attestation's hash while preserving others.
+**Retention is not validity.** An attestation whose `retention_hint` has passed and whose payload has been reclaimed is still a valid attestation at Layer 2. Its signature verifies. What has changed is its disclosability (§6): the payload may no longer be retrievable, so a verifier may see only metadata.
 
-**Revocation is additive, not durable-hash-mutating.** Per §4.3, revocation is expressed as a new attestation whose `subject` is `SHA-256(target_canonical_bytes)`. The revocation attestation itself is anchored per §5.1; the target attestation's on-chain hash is unaffected. A verifier walking the substrate sees both hashes and applies reader-side policy about how to weigh the revocation against the target (§4.4). Substrates MUST NOT interpret a revocation as license to delete or hide the target's on-chain hash. This is the anti-erasure discipline: an attestation once published, and any later revocations of it, are both matters of durable public record.
+### §5.4 Durability of the notary hash
 
-**Substrate compromise.** If a substrate is discovered to have violated its published durability guarantees (an operator forcibly deleted hashes, a chain executed a policy-driven rollback), attestations previously anchored to it lose the temporal grounding the substrate was providing. Signatures over those attestations remain cryptographically valid, but the "the hash existed at time T" property collapses. Implementations SHOULD document a recovery posture: whether to re-anchor affected attestations to a different substrate, whether to accept substrate-A attestations as substrate-B attestations for graph-analysis purposes, and whether reader-side heuristics should discount attestations anchored to compromised substrates. Substrate-compromise recovery is not standardized in v0.1.
+Once published, the notary hash MUST NOT be revoked, mutated, or reversed by the notarization substrate under any protocol-visible circumstance. A verifier can rely on the invariant that a hash present today was present at its published timestamp and will remain present for as long as the substrate itself exists.
 
-### §5.5 Off-chain payload storage (implementation-defined)
+**Substrate-level failure modes** (chain reorganizations, ledger rollbacks) are out of protocol scope. Implementations SHOULD document what substrate-level guarantees they provide.
 
-Payloads are NOT stored on-chain by requirement of this specification. The on-chain record (§5.1) commits to the `data_hash`; the payload itself lives off-chain, typically in the implementation's application database (as in sworn-postgres and Cortex) or in an external content-addressed store.
+**Revocation is additive.** Per §4.3, revocation is expressed as a new attestation. The revocation is anchored per §5.1; the target attestation's notary hash is unaffected. Substrates MUST NOT interpret a revocation as license to delete or hide the target's notary hash.
 
-**Payload retrieval is not a Layer 4 concern.** The presentation layer (§6) governs how a verifier obtains a payload, subject to the consent semantics of §6.2. Layer 4's role ends at the hash commitment; making the payload retrievable is a Layer 5 responsibility.
+**Substrate compromise.** If a substrate is discovered to have violated its published durability guarantees, attestations anchored to it lose the temporal grounding the substrate was providing. Signatures remain cryptographically valid; the "hash existed at time T" property collapses. Substrate-compromise recovery is not standardized in v0.2.
 
-**Reclaimed payloads and hash validity.** A payload reclaimed per §2.7's `retention_hint` semantics does NOT affect the on-chain hash's validity. Verifiers that receive only metadata (the on-chain hash and the attestation's field structure without a retrievable payload) can still confirm the signature is valid, can still verify the signer identity, and can still walk the graph to see revocations and corroborations. What they cannot do is verify that any candidate payload they encounter later matches the `data_hash`; that check requires the payload itself.
+### §5.5 Off-chain payload storage
 
-**Substrate MAY store payloads.** Nothing in this specification prevents a substrate from storing the full payload on-chain if the substrate's storage economics allow it. Substrates that do so simply collapse §5's off-chain-payload assumption into on-chain storage. The verifier's independent-recomputation rule (§5.1) still applies: the payload's canonicalized-JSON SHA-256 MUST equal the published `data_hash`.
+Payloads are NOT stored on the notary substrate by requirement of this specification. The notary record commits to `data_hash`; the payload lives off-chain, typically in the implementation's application database or an external content-addressed store.
 
-### §5.6 What is NOT in this layer (specific chain choice, PDA layouts; see appendices)
+Implementations MAY publish payload storage locations in off-chain metadata; the protocol does not require any specific storage model. What the protocol requires is that a verifier who obtains a payload can independently compute `SHA-256(canonicalize(payload))` and confirm equality with `data_hash` (§6.1).
 
-The following are explicitly out of scope for §5's required text:
+### §5.6 Forbidden substrate operations
 
-- **Choice of substrate.** Whether an implementation uses Solana, Ethereum, Bitcoin, a Postgres append-only table, a git-anchored log, or a certificate-transparency log is an implementation decision. SWORN v0.1 requires only that the substrate satisfy §5.1's publication rule and §5.4's durability rule.
-- **Substrate-specific data formats.** How a Solana PDA is structured, how a Postgres row is laid out, how an Ethereum event is encoded: all substrate-defined. Appendix A documents the Solana SAS binding; Appendix B documents the Postgres binding. Neither is normative for other substrates.
-- **Substrate-native identifiers as attestation subjects.** An attestation MAY reference a substrate-native identifier (a Solana account address, an Ethereum transaction hash, a git commit) as its `subject` when the activity type's schema calls for it, but such references are activity-type-defined and MUST NOT substitute for the SHA-256 hash primitive when the target is another SWORN attestation (§4.3).
-- **Cost, throughput, and operational economics.** Which substrate is cheapest per attestation, which is fastest to publish, which offers the strongest durability guarantees: all substrate-choice concerns. SWORN v0.1 makes no recommendation. Implementations SHOULD document their substrate's cost and throughput characteristics so integrators can choose accordingly.
-- **Substrate discovery.** How a verifier learns which substrate anchors a given attestation is a Layer 5 concern (§6.1's verification-endpoint contract) or an application-layer concern, not a Layer 4 mechanism.
-
-Implementations that wish to add substrate-specific behavior (batched anchoring, on-chain payload storage, custom retention policies) MAY do so provided the required text of §5.1 through §5.4 is preserved. Where an implementation's substrate cannot satisfy the required text (for example, a substrate that does not guarantee hash durability), that substrate is NOT conforming for SWORN attestations regardless of what else it provides.
+The SAS binding (bindings/sas.md §4) enumerates SAS instructions that a conforming implementation MUST NOT invoke on SWORN attestations. Chief among them: the `tokenize` and `close` instructions. Invoking either would express a transfer or deletion the specification's §5.4 durability rule forbids at the protocol layer.
 
 ---
 
 ## §6 Layer 5: Presentation
 
-Layer 5 defines how third parties interact with attestations after Layer 4 has anchored them. Its central discipline is *shown, not pulled*: a conforming implementation MUST enable verification of attestations a caller already knows about, and MUST NOT enable enumeration, discovery, or bulk export of attestations by properties of their subjects or signers. This is the property that keeps the SWORN graph from becoming a surveillance database while preserving its utility as verifiable testimony.
+Layer 5 defines how third parties interact with attestations after Layer 4 has anchored them. The central discipline is *shown, not pulled*: a conforming implementation MUST support verification of attestations a caller already knows about, and MUST NOT support enumeration, discovery, or bulk export of attestations by properties of their subjects or signers. This is what keeps the SWORN graph from becoming a surveillance database while preserving its utility as verifiable testimony.
 
 ### §6.1 Verification endpoint contract
 
 A conforming implementation MUST expose a verification interface that, given an attestation identifier known to the caller, returns:
 
-- the full canonical bytes of the attestation (or the primitive fields sufficient for the caller to reconstruct them per §3.1),
-- the signature (64 bytes, per §3.2),
-- the `activity_type` URI (from which `activity_hash` is derived per §2.4),
-- the substrate-published `attestation_hash` (per §5.1) sufficient for the caller to confirm anchoring against the notarization substrate,
-- and the metadata required to interpret provenance fields (per §2.5).
+- the full canonical bytes of the attestation (or the primitive fields sufficient for the caller to reconstruct them per §3.1);
+- the signature (64 bytes, per §3.2);
+- the `activity_type` URI (from which `activity_hash` derives per §2.4);
+- the notary-published `attestation_hash` (per §5.1) sufficient for the caller to confirm anchoring against the notary;
+- the metadata required to interpret provenance fields (per §2.5).
 
-The verification interface MUST NOT return the payload as part of this call. Payload disclosure is a distinct operation per §6.2.
+The verification interface MUST NOT return the payload. Payload disclosure is a distinct operation per §6.2.
 
-Implementations MAY offer the verification interface over any transport (HTTP, gRPC, CLI, a substrate query directly, an in-process library call). SWORN v0.1 does not mandate a specific transport, but the reference implementation exposes it as HTTP+JSON at `GET /attestations/{id}` for metadata and `GET /verify/{id}` for a server-computed valid/invalid answer (see Appendix B and [extol-work/sworn-postgres](https://github.com/extol-work/sworn-postgres)'s `openapi.yaml`).
+Transport is implementation-defined (HTTP, gRPC, CLI, direct substrate query, in-process library call).
 
-**Independent verification requirement.** Regardless of transport, a caller receiving the verification-endpoint response MUST be able to independently reconstruct the canonical bytes, recompute `SHA-256(canonical_bytes)` and confirm it matches the substrate-published `attestation_hash`, and verify the Ed25519 signature. An implementation whose response cannot be independently verified in this way is NOT conforming, even if it returns a valid-looking status. The trust primitive is the caller's own recomputation, not the endpoint's assertion.
+**Independent verification.** Regardless of transport, a caller receiving the verification response MUST be able to independently reconstruct the canonical bytes, recompute `SHA-256(canonical_bytes)` and confirm equality with the notary-published `attestation_hash`, and verify the Ed25519 signature. An implementation whose response cannot be independently verified this way is NOT conforming, even if it returns a valid-looking status.
 
-### §6.2 Two-call design (verify metadata, disclose payload with subject consent)
+### §6.2 Two-call design: verify then disclose
 
-Verification and payload disclosure are separate operations. Verification (§6.1) reveals who signed what class of claim about which subject, plus the hash commitment to the payload's content. Disclosure reveals the payload itself.
+Verification and payload disclosure are separate operations. Verification (§6.1) reveals who signed what class of claim about which subject, plus the hash commitment to the payload. Disclosure reveals the payload.
 
 **Required separation.** Implementations MUST NOT return payload content from the verification interface. Implementations MUST require an explicit disclosure authorization (per §6.3) before returning payload bytes.
 
-**Rationale.** A verifier who wants to know "did signer X make a claim of type Y about subject Z at time T" can answer that question from the verification interface alone, without seeing the specific content of the claim. Many use cases (aggregate counts, standing-graph traversal, temporal analysis, dispute resolution about who signed what) require only the metadata. Payload content is often more sensitive than the fact of the attestation and should require a separate, signer-authorized step to retrieve.
-
-**Payload authenticity check on disclosure.** When an implementation returns a payload via a disclosure call, the caller MUST be able to compute `SHA-256(canonicalize(payload))` and confirm equality with the `data_hash` in the verified canonical bytes. A disclosed payload whose recomputed hash does not match `data_hash` MUST be rejected by the caller as tampered or misdelivered, even if the disclosure token was valid. The signature over `data_hash` is the payload's authenticity guarantee; the disclosure channel is a delivery mechanism, not a trust primitive.
+**Payload authenticity check on disclosure.** When an implementation returns a payload via disclosure, the caller MUST be able to compute `SHA-256(canonicalize(payload))` and confirm equality with `data_hash` from the verified canonical bytes. A disclosed payload whose recomputed hash does not match `data_hash` MUST be rejected as tampered, even if the disclosure token was valid.
 
 ### §6.3 Disclosure token semantics
 
@@ -539,219 +485,160 @@ A disclosure token authorizes exactly one retrieval of one attestation's payload
 
 **Required properties.**
 
-- **Single-use by default.** A conforming implementation MUST redeem each disclosure token at most once. A second redemption attempt MUST fail (the reference implementation returns HTTP 410 Gone with an explanatory body). Implementations MAY offer explicitly-designated multi-use tokens as a separate token type; where they do, the multi-use property MUST be visible in the token's metadata so a caller can distinguish.
-- **Time-bounded.** Every token has an expiration. Implementations MUST reject expired tokens with a distinct error class from single-use exhaustion (so callers can distinguish "you already used this" from "this window has closed"). SWORN v0.1 recommends a minimum floor of 60 seconds and a maximum ceiling of 7 days for single-use tokens; implementations MAY tune within that range.
-- **Signer-authorized.** A disclosure token MUST be issued by proof of control of the attestation's signing key or by a mechanism the signer has explicitly authorized. Implementations MUST NOT permit unauthenticated parties to mint disclosure tokens for arbitrary attestations. The reference implementation binds token issuance to an Ed25519 signature by the attestation's signer over a domain-separated issuance message; other equivalent mechanisms (session-authenticated UI approval by the signer, delegated authorization within a signer-controlled application, cryptographic capability tokens) are acceptable provided the signer's authorization is present at issuance time.
-- **Domain-separated.** The bytes signed to authorize token issuance MUST NOT be substitutable for the canonical byte sequence of any attestation (§3.1) or the canonical form of any other SWORN operation. The reference implementation prefixes issuance bytes with the literal string `sworn-disclosure-token-v1`; other implementations MUST use an equivalent domain separator that cannot collide with attestation canonical bytes.
+- **Single-use by default.** A conforming implementation MUST redeem each disclosure token at most once. A second redemption attempt MUST fail with a distinct error. Implementations MAY offer explicitly-designated multi-use tokens as a separate token type; where they do, the multi-use property MUST be visible in the token's metadata.
+- **Time-bounded.** Every token has an expiration. Implementations MUST reject expired tokens with a distinct error class from single-use exhaustion. SWORN v0.2 recommends a minimum floor of 60 seconds and a maximum ceiling of 7 days for single-use tokens.
+- **Signer-authorized.** A disclosure token MUST be issued by proof of control of the attestation's signing key or by a mechanism the signer has explicitly authorized. Implementations MUST NOT permit unauthenticated parties to mint disclosure tokens for arbitrary attestations.
+- **Domain-separated.** The bytes signed to authorize token issuance MUST NOT be substitutable for the canonical byte sequence of any attestation (§3.1) or the canonical form of any other SWORN operation. Implementations MUST use a domain separator that cannot collide with attestation canonical bytes; the reference domain separator is the literal string `sworn-disclosure-token-v1`.
 
-**Non-normative guidance on UX.** The disclosure token is protocol plumbing. How it reaches the requester (URL, QR code, in-app deep link, approval prompt, capability delegation) is an application-layer decision. The single-use default should not be interpreted as requiring the token itself to be human-visible; well-designed implementations often hide the token entirely behind a "requester asks, signer approves in-app, payload delivered" flow.
+### §6.4 Refused operations
 
-### §6.4 Refused operations (list-by-subject, bulk export, name search)
-
-A conforming implementation MUST NOT expose operations that enumerate attestations by properties of their subjects, signers, or payloads. Specifically, the following operations MUST be refused (returned as errors, not silently unsupported):
+A conforming implementation MUST NOT expose operations that enumerate attestations by properties of their subjects, signers, or payloads. The following MUST be refused (returned as errors, not silently unsupported):
 
 - **List by subject.** A query returning all attestations naming a given subject.
 - **List by signer.** A query returning all attestations produced by a given signer.
-- **Bulk export.** A query returning attestations without a specific caller-supplied identifier.
+- **Bulk export.** A query returning attestations without a caller-supplied identifier.
 - **Name or attribute search.** A query returning attestations whose payload content matches a search pattern.
 - **Signer discovery.** A query returning signers matching a real-world identity, label, or attribute.
 
-Implementations MUST return an explicit refusal (the reference implementation uses HTTP 400 with an error body identifying the operation as refused by design) rather than treating these as absent features. The refusal is a first-class part of the presentation contract: an implementer testing conformance MUST observe the refusal to confirm the discipline is enforced.
+Implementations MUST return an explicit refusal (not treat these as absent features). The refusal is a first-class part of the presentation contract: an implementer testing conformance MUST observe the refusal to confirm the discipline is enforced.
 
-**Rationale.** SWORN's design commitment is that the attestation graph is *verifiable* without being *enumerable*. A verifier holding an attestation identifier (however obtained) can confirm its authenticity; a party who does not hold an identifier cannot bulk-discover the graph's contents. This is what prevents SWORN from becoming a portable dossier system. The discipline is enforced at Layer 5 because it is the layer where callers meet the system; a substrate that stores attestations without a Layer 5 wrapper (a raw Solana PDA scan, for example) has bypassed the discipline, and any implementation exposing such a raw view to callers is NOT conforming as a SWORN Layer 5 presentation surface.
+**Rationale.** The design commitment is that the attestation graph is verifiable without being enumerable. A verifier holding an attestation identifier can confirm its authenticity; a party who does not hold an identifier cannot bulk-discover the graph's contents. The discipline is enforced at Layer 5 because it is the layer where callers meet the system. A raw substrate scan that bypassed this layer (for example, an unrestricted `getProgramAccounts` scan) is not itself a conforming SWORN presentation. §5.1's PDA-seed discipline exists so that even a raw substrate scan does not become a walkable index.
 
-**Signer-scoped exceptions.** A signer authenticated to their own key MAY retrieve a list of their own attestations from an implementation that stores them; this is a self-service reflection, not enumeration by third parties. Implementations offering this MUST authenticate the request as coming from the signer's key (via signature, session tied to the key, or equivalent).
+**Signer-scoped exceptions.** A signer authenticated to their own key MAY retrieve a list of their own attestations. This is self-service reflection, not enumeration by third parties. Implementations offering this MUST authenticate the request as coming from the signer's key.
 
-**Application-scoped exceptions.** An implementation MAY expose enumeration within a bounded application context (for example, all attestations attached to a specific event, group, or resource the caller has independent access to) provided the enumeration is scoped by an application-layer resource identifier the caller must possess. Enumeration by properties of the attestation's signer or subject remains refused.
+**Application-scoped exceptions.** An implementation MAY expose enumeration within a bounded application context (all attestations attached to a specific event or resource the caller has independent access to) provided the scope is an application-layer resource identifier the caller must possess. Enumeration by properties of the attestation's signer or subject remains refused.
 
-### §6.5 Rate limiting and abuse considerations
+### §6.5 Rate limiting
 
-Implementations MUST offer rate limiting on the verification and disclosure interfaces. Rate limiting is not part of the trust model (§4.1 is explicit that admission control is separate from signer identity), but is required at Layer 5 to prevent enumeration-by-timing (where an attacker probes many candidate identifiers to discover which resolve) and to prevent disclosure-endpoint abuse (where an attacker attempts to burn valid tokens with speculative redemptions).
+Implementations MUST offer rate limiting on the verification and disclosure interfaces to prevent enumeration-by-timing (probing candidate identifiers to discover which resolve) and disclosure-endpoint abuse.
 
 **Required posture.**
 
-- The verification interface (§6.1) SHOULD carry a per-caller rate limit sufficient to prevent enumeration probing. Precise numeric thresholds are implementation-defined; the reference implementation uses 60 requests per minute per source IP as a starting point.
-- The disclosure interface (§6.2, §6.3) MUST carry a stricter rate limit than the verification interface. Disclosure returns payload bytes, and lax rate limiting on disclosure functionally reintroduces bulk export. The reference implementation caps disclosure at 6 requests per minute per source IP.
-- Implementations MUST distinguish rate-limited responses from other error classes (the reference implementation uses HTTP 429 with a distinct body) so callers can back off appropriately.
-- Rate-limit tracking MUST NOT create a signer profile. Implementations MAY track per-IP or per-session request counts but MUST NOT correlate rate-limit state with signer identity in a way that reintroduces signer-linked enumeration through the back door.
-
-**Non-normative guidance.** Production deployments will typically front SWORN implementations with a dedicated reverse proxy, CDN, or API gateway that carries the actual rate-limiting load; the reference implementation's in-process rate limiter is a demonstration of the pattern, not a production-scale solution. Implementations SHOULD document their expected deployment posture so integrators can configure their edge appropriately.
+- The verification interface SHOULD carry a per-caller rate limit sufficient to prevent enumeration probing. Precise numeric thresholds are implementation-defined.
+- The disclosure interface MUST carry a stricter rate limit than the verification interface, since disclosure returns payload bytes.
+- Implementations MUST distinguish rate-limited responses from other error classes so callers can back off appropriately.
+- Rate-limit tracking MUST NOT create a signer profile. Implementations MAY track per-IP or per-session request counts but MUST NOT correlate rate-limit state with signer identity.
 
 ---
 
 ## §7 Security considerations
 
-SWORN's security posture is deliberately narrow. The protocol establishes that a specific signer produced a specific statement over specific canonical bytes, and that the statement was anchored in a public durable ledger at a specific time. Everything else is either reader-side interpretation (§4.4) or out of scope. Implementations MUST NOT present derived signals as security guarantees they are not.
+SWORN's security surface is deliberately narrow. The protocol establishes that a specific signer produced a specific statement over specific canonical bytes and that the statement was anchored in a public durable substrate at a specific time. Everything else is reader-side interpretation or out of scope.
 
-The considerations below are the security surface SWORN is responsible for, and where its guarantees end.
-
-### §7.1 Sybil resistance (bounded, not absolute)
+### §7.1 Sybil resistance is bounded
 
 SWORN provides no protocol-level mechanism to prevent one real-world party from operating multiple signer keys. Any Ed25519 keypair produces conforming attestations; the graph does not distinguish "one person with five keys" from "five people with one key each."
 
-**What SWORN provides.** The graph is public. A colluding cluster of keys signing back-and-forth attestations to each other is legible as such at the graph-analysis layer: the density of mutual attestation, the absence of external corroboration, and the timing correlation between keys are all detectable properties for a verifier willing to compute them. The `witnessing_depth` (§2.5, §9.3) and `attestor_relationship` (§2.5, §9.4) fields commit the signer's own claim about the epistemic depth of the witnessing act, making low-depth self-report clusters explicit rather than hidden.
+The graph is public. A cluster of keys signing back-and-forth attestations to each other is legible as such at the graph-analysis layer: density of mutual attestation, absence of external corroboration, and timing correlation between keys are all properties a verifier can compute. The `witnessing_depth` and `attestor_relationship` fields commit the signer's own claim about the epistemic depth of the witnessing act, making low-depth self-report clusters explicit rather than hidden.
 
-**What SWORN does NOT provide.** Real-world identity verification, biometric uniqueness, proof-of-personhood, KYC, or any protocol-level "one person one signer" property. Implementations that need such properties MUST layer them above SWORN as application-layer concerns, subject to §1.5's transparency requirement wherever the layered property is exchanged for value.
+SWORN does not provide real-world identity verification, biometric uniqueness, proof-of-personhood, or KYC. Implementations that need such properties layer them above SWORN as application concerns.
 
-**Non-normative guidance.** Graph-analysis heuristics for detecting probable Sybil clusters are an active area of research and implementation choice; SWORN's contribution is that the raw graph is available for such analysis in a substrate-neutral form. Implementations SHOULD document the Sybil-resistance heuristics they apply when deriving signals from the graph, per §1.5.
+### §7.2 Key compromise
 
-### §7.2 Attack cost model
+A compromised signing key can produce attestations that are cryptographically valid but not authorized by the human or organization associated with the key. Because v0.2 has no formal key rotation (§3.5), the protocol offers no signature-layer distinction between "attestation produced before compromise" and "attestation produced after compromise."
 
-The economically relevant properties of a SWORN attestation are:
+Applications concerned with key compromise MUST layer their own detection above the protocol (behavioral analysis, monitoring for unexpected signing patterns, revocation attestations from the compromised key naming attestations to disregard).
 
-- **Signing an attestation costs the signer nothing beyond compute** (an Ed25519 signature). SWORN does NOT rely on signing costs for security.
-- **Anchoring an attestation costs whatever the substrate charges** (§5.1); this is substrate-dependent and MAY be zero, MAY be small (Solana SAS transaction fees), or MAY be significant.
-- **Reversing an anchored attestation is infeasible** at the protocol layer (§5.4). The signer can add a revocation (§4.3) but cannot unpublish the original.
+### §7.3 Colluding attestation rings
 
-**Consequence for adversaries.** Fabricating a valid attestation requires the signing key. Fabricating a graph of mutually-corroborating attestations at scale requires either many colluding keyholders or many keys under a single controller (§7.1). Cost per fabricated attestation is dominated by substrate fees plus the coordination cost of the Sybil operation itself.
+Colluding signers can produce attestations that mutually corroborate false claims. SWORN does not detect such collusion at the protocol layer; the graph-analysis approach in §7.1 is a reader-side heuristic, not a spec-enforced property.
 
-**Consequence for readers.** The absence of a signature is definitive: no valid attestation existed without a signature. The presence of a signature is definitive as to authorship: only the holder of the signing key produced this specific 248-byte canonical sequence. Neither the presence nor absence of a signature is definitive as to truth of the underlying claim. Reader-side interpretation is required.
+Applications MAY require attestations from signers with independent standing (measured by graph position, external-source provenance, or off-chain identity binding) as a policy layer above SWORN. Such policies are application-defined and SHOULD be documented alongside the standing-conversion transparency requirements of applications built on SWORN.
 
-### §7.3 Colluding attestation rings and graph-analysis detection
+### §7.4 Payload availability versus hash durability
 
-A colluding ring is a set of keys whose attestations mutually corroborate at high volume without external corroboration. SWORN treats such rings as first-class members of the graph: their attestations are cryptographically valid, they cannot be prevented, and they are legible via graph analysis.
+The notary hash is durable (§5.4). The payload is not; retention hints (§2.7) may allow the payload to be discarded. Verifiers MUST distinguish "the signature verifies but the payload has been reclaimed" from "the signature does not verify." The former is a valid attestation with limited disclosability; the latter is an invalid attestation.
 
-**Detection primitives that the graph exposes:**
+Applications relying on future payload retrieval SHOULD either use `retention_hint = -1` or maintain their own payload storage independent of any single implementation's retention policy.
 
-- **Density.** A cluster of N keys with roughly N² mutual attestations and few outbound attestations to signers outside the cluster.
-- **Timing correlation.** Attestations signed within tight time windows across a cluster suggest coordinated action.
-- **Provenance homogeneity.** A cluster whose attestations are all `self_reported` or `computed`, with no `peer_witnessed` or `physically_observed` depth, and no `orcid` / `git_commit` / `regulatory_filing` source types, is legible as low-external-anchoring.
-- **Isolation.** A cluster whose members appear in no other communities' graphs is more concerning than a cluster whose members are broadly connected.
+### §7.5 Timestamp trust
 
-**What SWORN requires.** Nothing about ring detection at the protocol level. The graph is available; interpretation is reader-side. Implementations that derive standing signals SHOULD document their ring-detection heuristics per §1.5.
-
-**What SWORN prevents.** SWORN cannot prevent ring formation. What it does is prevent rings from being hidden: because the graph is public and substrate-anchored (§5.1, §5.4), any verifier can compute the density, correlation, and provenance-homogeneity metrics above without asking the ring for permission.
-
-### §7.4 Key compromise and revocation
-
-If a signer's private key is compromised, an attacker can produce arbitrary attestations under that signer's identity. SWORN v0.1 provides no protocol-level compromise-declaration mechanism.
-
-**Signer-side response.** A signer who suspects key compromise MAY sign a revocation (§4.3) of any specific attestation they believe the attacker produced. This requires the compromised key itself (which the signer presumably still holds unless the attacker has exclusive control). Where the signer no longer holds the key, they MAY sign an attestation under a new key stating "key X is compromised as of time T; treat attestations by X after T with suspicion"; such statements are first-class attestations but are not protocol-level revocations of the compromised key.
-
-**Reader-side response.** Verifiers MAY apply reader-side policy to discount or ignore attestations from signers who have publicly declared key compromise, provided the discounting policy is documented per §1.5.
-
-**Not provided by v0.1.** Formal compromise attestation with a claimed compromise timestamp, key-rotation semantics that transfer standing from old to new key, and centralized revocation lists are all reserved for a future version. Implementations that need these properties today MUST build them at the application layer with documented semantics.
-
-**Attacker mitigation posture.** Because §5.4 requires substrate hashes to be irreversible, attestations produced by a compromised key BEFORE the compromise cannot be retroactively invalidated by the compromise. This is a feature: legitimate historical attestations remain legible. It is also a burden: a compromised key's attestations after compromise are indistinguishable at the signature layer from the signer's own attestations. Reader-side timestamp comparison against a claimed-compromise time is the mitigation.
-
-### §7.5 Payload availability vs. hash durability
-
-The on-chain hash and the off-chain payload have different durability guarantees. The hash lives as long as the substrate's record (§5.4); the payload lives as long as some party chooses to preserve it, subject to the `retention_hint` (§2.7).
-
-**Security implication.** A verifier presented with an attestation whose payload is no longer retrievable can still confirm:
-
-- The signer produced a specific 248-byte canonical sequence (Ed25519 verify per §3.2).
-- The `data_hash` in that sequence was published to the substrate at a specific time (§5.1, §5.4).
-
-The verifier cannot confirm what payload the `data_hash` covered without recovering the payload from some retention source. This is by design: `retention_hint` is what makes SWORN GDPR-viable (§8.3). It is also a real property callers must handle: an attestation whose signature verifies but whose payload cannot be retrieved is "authentic but no longer legible."
-
-**Not a validity issue.** Payload unavailability MUST NOT be treated as signature failure. The attestation remains valid at the signature and anchor layers regardless of whether the payload can be recovered. Implementations MUST distinguish "signature invalid" (a hard failure) from "payload unavailable" (a soft condition that limits what the verifier can conclude but does not invalidate the attestation).
-
-**Adversarial retention scenario.** An adversary who controls the only party retaining a payload could withhold it to prevent verification of the payload's content. SWORN v0.1 provides no protocol-level defense against this beyond the retention hint's signaling. Implementations that need durable payload availability MUST ensure the payload is retained by multiple independent parties (the signer themselves, the subject, mirrored storage) or use a substrate that stores payloads on-chain (accepting the cost per §5.5).
+The signer's `signer_asserted_at` is a claim, not a proof. A signer can produce past-dated attestations, though verifiers MUST reject future-dated ones beyond clock-skew tolerance (§2.7). For attestations that have been notarized, the substrate-published timestamp is authoritative (§2.7, §5.1). For questions of "when did the signer make this claim," verifiers MUST prefer the substrate timestamp over `signer_asserted_at`.
 
 ---
 
 ## §8 Privacy considerations
 
-SWORN's privacy properties emerge from a specific split: the *facts of attestation* (who signed, when, about what class of subject, anchored where) are public and verifiable by anyone; the *content of the payload* is not published on the ledger and is retrievable only through the disclosure discipline of Layer 5 (§6). This section names what that split provides, what it does not, and where implementers must carry privacy load the protocol deliberately does not carry.
-
-Privacy in SWORN is not a matter of hiding attestations. Attestations are, by construction, cryptographically committed to a public substrate so anyone can verify them independently (§5.1). Privacy is a matter of controlling *what verifiers can learn from the graph beyond what the signer intended to disclose*. That control lives at three layers: the payload split (§8.1), the subject-consent flow for disclosure (§8.2), and the pseudonymity of signers and subjects (§8.4). Where privacy meets immutability, the resulting tension is real and named honestly (§8.3).
+SWORN's privacy properties emerge from a specific split: the facts of attestation (who signed, when, what class of claim, anchored where) are the signer's own responsibility to control at attestation time; the content of the payload is not published on the notary substrate and reaches verifiers only through the disclosure discipline of Layer 5 (§6). This section names what the split provides, what it does not, and where implementers carry privacy load the protocol does not carry.
 
 ### §8.1 Public verification, private payloads
 
-The canonical byte sequence signed by the signer (§3.1) commits to `data_hash`, a SHA-256 of the canonicalized payload. The payload itself is never part of the canonical bytes. This is the primitive that makes public verification of private content possible: a verifier can confirm that a payload matches an attestation without the payload having ever been published on the substrate.
+The canonical byte sequence commits to `data_hash`, a SHA-256 of the canonicalized payload. The payload itself is never part of the canonical bytes. This is the primitive that allows public verification of private content.
 
-**Required semantics.** Implementations MUST NOT publish attestation payloads to the notarization substrate as a side effect of anchoring the hash. A substrate MAY store payloads on-chain if the implementation deliberately chooses to, subject to that choice's downstream implications (§5.5 and §8.3 both apply to on-chain payload storage). The default posture, and the reference implementation's posture, is that payloads live off-chain and reach verifiers only through Layer 5's disclosure endpoints.
+**Required.** Implementations MUST NOT publish attestation payloads to the notary substrate as a side effect of anchoring the hash. Payloads live off-chain; they reach verifiers only through Layer 5's disclosure endpoints.
 
-**What is public regardless.** The following are always readable by any party with access to the notarization substrate: `signer` pubkey, `subject` field (which may itself be a pubkey or a content hash), `activity_type` URI, `data_hash`, `source_hash` and `source_type` (provenance is signed content, §2.5), timestamps, `witness_for`, `nonce`, and `signature`. Implementers designing subject or provenance schemas MUST assume these fields are as public as the substrate they anchor to.
+**What is public regardless.** The following are readable by anyone with access to the reconstructible canonical bytes: `signer` pubkey, `subject`, `activity_type`, `data_hash`, `source_hash` and `source_type`, timestamps, `witness_for`, `nonce`, and `signature`. Implementers designing subject or provenance schemas MUST assume these fields are as public as any store from which they might be retrieved.
 
-**Implication for `subject` design.** If an activity type places a real-world identifier directly into `subject` (a bare email address, a legal name), that identifier is public. Activity type schemas that need subject privacy SHOULD use a content hash of an identifier plus a per-subject salt held by the signer, not the identifier itself. The protocol does not enforce this because it is a schema-design decision, but implementations documenting activity types SHOULD note the visibility implications of their subject encoding.
+Note the interaction with §5.1: the notary substrate itself does not expose these fields via a walkable index. But any party holding the canonical bytes (through legitimate presentation or through a payload disclosure) learns all of them.
 
-### §8.2 Subject-mediated disclosure
+**Subject design.** If an activity type places a real-world identifier directly into `subject` (a bare email, a legal name), that identifier is present in the canonical bytes and therefore learnable by any legitimate holder of them. Schemas that need subject privacy SHOULD use a content hash of an identifier plus a per-subject salt held by the signer, not the identifier itself.
 
-Layer 5's two-call design (§6.2, §6.3) is the required mechanism by which a verifier gains access to an attestation's payload. Verification of the signature is one call and requires no subject involvement; disclosure of the payload is a separate call and requires a signer-authorized disclosure token. This split is the privacy primitive that distinguishes SWORN from a public database of signed statements.
+### §8.2 Signer-authorized disclosure
 
-**Required semantics.** Implementations MUST NOT expose an unauthenticated payload-retrieval path indexed by attestation identifier. Any endpoint that returns payload content MUST require a valid disclosure token per §6.3. Implementations MUST NOT bypass token requirements for administrative, debugging, or convenience reasons that are not explicitly documented and subject-controllable.
+Layer 5's two-call design (§6.2, §6.3) is the mechanism by which a verifier gains access to an attestation's payload. Verification requires no signer involvement; disclosure requires a signer-authorized disclosure token.
 
-**Who authorizes disclosure.** In v0.1 the disclosure token is minted by the signer (§6.3), which is the same party that produced the attestation. This is the simplest privacy model: the party who signed the attestation controls who can read it. Implementations MAY offer signer-delegated disclosure policies (a signer grants a third party the right to mint tokens for a defined subset of the signer's attestations) provided such delegation is itself an attestation subject to §1.5 transparency. The delegation cannot be silent.
+**Required.** Implementations MUST NOT expose an unauthenticated payload-retrieval path indexed by attestation identifier. Any endpoint returning payload content MUST require a valid disclosure token per §6.3.
 
-**Subject-as-signer case.** When the signer is also the subject (`attestor_relationship = self`, §9.4), signer-authorized disclosure is equivalent to subject-authorized disclosure. Most privacy-relevant cases in practice are this case: an individual signing an attestation about themselves controls their own disclosure. Cases where signer and subject differ are addressed by activity-type schemas that either require the subject's own attestation of consent before the primary attestation is honored, or leave the trust decision to reader-side heuristics.
+**Delegation.** Implementations MAY offer signer-delegated disclosure policies (a signer grants a third party the right to mint tokens for a defined subset of the signer's attestations) provided such delegation is itself an attestation. Silent delegation is prohibited.
 
-**What subjects can NOT do in v0.1.** A subject who is not the signer cannot revoke, block, or veto an attestation about themselves at the protocol layer. This is a real limitation and is addressed at the application layer, not the spec layer: implementations that need "subject-veto" semantics MUST build them as application conventions (for example, an application-level rule that attestations about a subject are only honored if the subject has signed a consent attestation naming the potential attestor). SWORN v0.1 does not enforce such conventions; it does not preclude them.
+**Subject-as-signer.** When the signer is also the subject (`attestor_relationship = self`, §9.4), signer-authorized disclosure is equivalent to subject-authorized disclosure. Cases where signer and subject differ are addressed by activity-type schemas; SWORN v0.2 does not enforce subject-consent semantics separately from signer authorization.
 
 ### §8.3 Right to be forgotten and immutable hashes
 
-The tension between GDPR-style deletion rights and cryptographic immutability is real and not resolvable by protocol design alone. This section names how SWORN divides the surface so that the resolvable parts can be resolved and the unresolvable parts are legible as such.
+The tension between deletion rights (GDPR Article 17 and equivalents) and cryptographic immutability is real and not fully resolvable by protocol design. This section names how SWORN divides the surface so the resolvable parts can be resolved and the unresolvable parts are legible as such.
 
-**What SWORN makes tractable.**
+**What SWORN makes tractable.** Because payloads are off-chain and subject to retention hints (§2.7, §5.5), the content carrying personal data can be discarded by the parties retaining it. A subject requesting erasure can be honored by removing the payload from every retention source under the implementation's control. The notary hash remains but reveals nothing about the payload beyond that some 32-byte value was committed.
 
-Because payloads are stored off-chain and are subject to the retention hint (§2.7, §5.5), the content that carries personal data can be discarded by the parties retaining it. A subject requesting erasure can be honored by removing the payload from every retention source under the implementation's control. The on-chain hash remains, but the hash alone reveals nothing about the payload beyond that some 32-byte value was committed. This is the shape that makes SWORN compatible with erasure requests on the payload dimension.
+**What remains regardless.** The canonical bytes are re-derivable by anyone who ever held them. `signer`, `subject`, `activity_type`, `data_hash`, provenance fields, and timestamps are inside the signed bytes. If the `subject` field carries a real-world identifier directly, that identifier is embedded in any legitimately-held canonical bytes and is not erasable without invalidating the signature.
 
-**What remains public regardless.**
+**Notary-side.** The notary substrate publishes only `attestation_hash` and a timestamp under the §5.1 discipline. The substrate itself does not carry a walkable copy of the canonical bytes. But the substrate does confirm that an attestation with a particular `attestation_hash` was published at a particular time, and any party who obtains the canonical bytes elsewhere can prove they match the published hash.
 
-The `signer`, `subject`, `activity_type`, `data_hash`, provenance fields, and timestamps remain durable on the substrate. If the `subject` field carries a real-world identifier directly, that identifier remains public even after payload deletion. If provenance points at an external source (`source_hash` = SHA-256 of an ORCID URL, for instance), the source reference remains public. Implementers designing schemas that must satisfy erasure requests SHOULD ensure real-world identifiers appear only inside the payload, not in fields that go into the canonical byte sequence. Once a personal identifier is in the signed bytes, it is not erasable without invalidating every signature over it.
+**Required disclosure to signers and subjects.** Implementations that accept personal data into SWORN attestations MUST clearly disclose, before signing, which fields will be part of the signed bytes (durable and re-derivable by any holder) and which will be retention-controllable (in the payload). Silent conflation is a privacy failure.
 
-**Required disclosure to signers and subjects.**
+**Metadata-as-personal-data.** In some legal readings, surviving metadata (fact of signing, activity type, timestamp) constitutes personal data. SWORN v0.2 provides no protocol mechanism to erase this surviving metadata. Implementations for which this is unacceptable MUST either use SWORN only for content whose metadata is not itself personal data, or NOT use SWORN for that content class.
 
-Implementations that accept personal data into SWORN attestations MUST clearly disclose, before signing, which fields will be public on the substrate and which will be retention-controllable. Signers and subjects MUST be able to distinguish "this data is anchored publicly forever" from "this data is retained off-chain and can be discarded on request." Silent conflation is a privacy failure; the disclosure requirement makes the split legible at the moment the choice matters.
+### §8.4 Pseudonymity of signers
 
-**When the on-chain remainder is itself sensitive.**
+Signers are 32-byte Ed25519 public keys. Any mapping between a public key and a real-world person or organization is application-defined.
 
-There are cases where even the surviving metadata (fact of signing, activity type, timestamp) constitutes personal data under a strict reading of applicable law. SWORN v0.1 provides no protocol mechanism to erase this surviving metadata; a substrate that permits erasure of published records is not conforming with §5.4 (durability). Implementations for which this is unacceptable MUST either use SWORN only for content whose metadata is not itself personal data, or NOT use SWORN for that content class. Naming the limitation explicitly is what makes the spec honest about the constraint rather than promising a compatibility it cannot deliver.
+**Required.** Implementations MUST NOT require signers to be linked to a verified real-world identity as a condition of accepting their attestations.
 
-**Non-normative posture.** The reference implementation defaults to `retention_hint = -1` (indefinite) but exposes both bounded retention hints and payload-reclaim jobs (see the `sworn-postgres` implementation and `IMPLEMENTATION_NOTES.md`) so operators can offer subjects genuine deletion of payload content while preserving the signature-validity properties the spec requires.
+**Pseudonymity is not anonymity.** Standing accumulates to a public key. A pseudonymous signer who accumulates a large body of attestations has, from a reader's perspective, a legible history under that pseudonym. A reader who links `signer` pubkey P to a real-world entity by other means (traffic analysis, off-chain leaks, self-disclosure) can then attribute all of P's attestation history to that entity.
 
-### §8.4 Pseudonymity of witnesses
+Signers who want unlinkability across attestations MUST use a distinct key per attestation, accepting the loss of accumulated standing under any one pseudonym. The protocol makes both patterns possible and enforces neither.
 
-Signers are 32-byte Ed25519 public keys (§4.1). The mapping between a public key and any real-world person or organization is implementation-defined and outside the protocol. This is the privacy property that lets SWORN carry attestations from parties who do not wish to reveal their real-world identity.
-
-**Required semantics.** Implementations MUST NOT require signers to be linked to a verified real-world identity as a condition of accepting their attestations. Implementations MAY offer verified-identity annotations as an off-chain metadata layer (a signer's pubkey associated with a verified email, ORCID, or organizational role) subject to §1.5 where such annotations are used to convert standing into value. The protocol itself accepts signers on the basis of key possession alone.
-
-**Pseudonymity is not anonymity.**
-
-Standing accumulates to a public key. A pseudonymous signer who accumulates a large body of attestations has, from a reader's perspective, a legible history under that pseudonym. This is intentional: it is what allows pseudonymous signers to build standing over time without revealing their real-world identity. It is also what makes correlation attacks against pseudonymous signers possible in principle. A reader who can link `signer` pubkey P to a real-world entity by other means (traffic analysis, off-chain leaks, self-disclosure) can then attribute all of P's attestation history to that entity.
-
-Implementations that offer pseudonymous signing SHOULD warn signers that pseudonymity across many attestations creates linkability that a single attestation would not. Signers who want true unlinkability across attestations MUST use a distinct key per attestation, accepting the loss of accumulated standing under any one pseudonym. The protocol makes both patterns possible and enforces neither.
-
-**Subject pseudonymity.**
-
-The same reasoning applies to subjects when the subject is a pubkey rather than a content hash. A subject who is named across many attestations by the same or overlapping signers accumulates a public profile under that pubkey. Activity type schemas that need stronger subject anonymity SHOULD use per-attestation content hashes rather than persistent subject pubkeys, at the cost of losing cross-attestation subject continuity.
-
-**What the protocol does NOT provide.**
-
-- No mixnet or anonymizing network for the anchoring transaction. If a signer publishes an anchoring transaction to a public substrate from a network location that reveals their identity, the protocol does not conceal that.
-- No zero-knowledge proofs of attestation properties in v0.1. A verifier who wants to know "does the signer have at least three ORCID-sourced attestations without learning which three" has no protocol-level primitive for that question. Deferred to a future version (see `OPEN_QUESTIONS.md`).
-- No forward secrecy for disclosed payloads. Once a payload is disclosed under a valid token, the recipient has a copy and can retain, redistribute, or leak it. Disclosure tokens control who gets initial access; they do not control what the recipient does after.
-
-Implementations that need any of these properties MUST build them at a higher layer, understanding that the underlying SWORN protocol does not enforce them.
+**Not provided by the protocol.** No mixnet for the notarization transaction. No zero-knowledge proofs of attestation properties in v0.2. No forward secrecy for disclosed payloads (once a payload is disclosed under a valid token, the recipient can retain, redistribute, or leak it).
 
 ---
 
-## §9 IANA-style registries (or equivalent for a young spec)
+## §9 Registries
 
 ### §9.1 Activity type namespace registry
 
-This registry lists namespaces reserved for use with SWORN activity type URIs. Registration in v0.1 is descriptive, not prescriptive: an implementation is free to use any well-formed URI as an activity type (§2.2), and this section documents namespaces already in use so implementers can align without stepping on each other. A formal registration process may land in a future version.
-
-**Reserved namespaces (informative):**
+This registry lists namespaces reserved for use with SWORN activity type URIs. Registration is descriptive: an implementation is free to use any well-formed URI as an activity type (§2.2), and this section documents namespaces already in use so implementers can align without collision.
 
 | Namespace prefix | Owner / source | Purpose |
 |---|---|---|
-| `work.extol.attestation/v1/` | Extol, Inc. | The first production adopter's original vocabulary (see §2.2). |
-| `sworn.dev/v1/` | The SWORN specification | Reserved for well-known types defined by future spec revisions (e.g., a `revocation` type in v0.2). |
-| `credit.niso.org/contributor-roles/` | NISO (Z39.104-2022) | CRediT (Contributor Roles Taxonomy). See §9.1.1. |
+| `https://sworn.dev/v1/` | The SWORN specification | Well-known types defined by this specification (see §4.3 revocation type). |
+| `https://credit.niso.org/contributor-roles/` | NISO (Z39.104-2022) | CRediT (Contributor Roles Taxonomy). See §9.1.1. |
 
-Non-reserved namespaces (any URI a signer chooses to use) remain valid activity types; the registry exists so widely-shared vocabularies do not collide.
+Non-reserved namespaces (any well-formed URI a signer chooses to use) remain valid activity types.
+
+**Registered types under `https://sworn.dev/v1/`.**
+
+| URI | Purpose | Payload schema |
+|---|---|---|
+| `https://sworn.dev/v1/revocation` | Revoke a prior attestation by the same signer (§4.3) | `subject` MUST be `SHA-256(target_canonical_bytes)`. Payload MAY carry a human-readable reason. |
+
+Additions to the `sworn.dev/v1/` namespace are additive and do not advance `spec_version`.
 
 #### §9.1.1 CRediT (Contributor Roles Taxonomy)
 
-CRediT (Contributor Roles Taxonomy) is a fourteen-role vocabulary developed by CASRAI and now maintained by NISO as ANSI/NISO Z39.104-2022. Its purpose is to provide transparency in contributions to scholarly published work, enabling systems of attribution, credit, and accountability that go beyond traditional authorship.
+CRediT is a fourteen-role vocabulary maintained by NISO as ANSI/NISO Z39.104-2022. SWORN registers the CRediT namespace so attestations recognizing research contributions can share a widely-adopted vocabulary.
 
-SWORN registers the CRediT namespace so that attestations recognizing research contributions can share a single, widely-adopted vocabulary. Implementations SHOULD prefer CRediT roles over ad-hoc alternatives when attesting to research contributions.
+**URI pattern.** Each CRediT role maps to a URI of the form `https://credit.niso.org/contributor-roles/<slug>/`, where `<slug>` is a lowercase kebab-case rendering of the role name. The URIs include the `https://` scheme and the trailing slash as published by NISO.
 
-**URI pattern.** Each CRediT role maps to a URI under `credit.niso.org/contributor-roles/<slug>`, where `<slug>` is a lowercase kebab-case rendering of the role name.
-
-**Fourteen roles:**
+**Fourteen roles.**
 
 | Slug | Role | Definition (summary) |
 |---|---|---|
@@ -762,27 +649,23 @@ SWORN registers the CRediT namespace so that attestations recognizing research c
 | `investigation` | Investigation | Conducting the research process; performing experiments or evidence collection. |
 | `methodology` | Methodology | Development or design of methodology; creation of models. |
 | `project-administration` | Project administration | Management and coordination of the research activity. |
-| `resources` | Resources | Provision of study materials, reagents, patients, samples, compute resources, etc. |
+| `resources` | Resources | Provision of study materials, reagents, patients, samples, compute resources. |
 | `software` | Software | Programming, software development, algorithm design, implementation, testing. |
 | `supervision` | Supervision | Oversight and leadership responsibility for the research activity. |
-| `validation` | Validation | Verification of the overall reproducibility of results and other experimental outputs. |
+| `validation` | Validation | Verification of reproducibility of results and other experimental outputs. |
 | `visualization` | Visualization | Preparation, creation, and presentation of published work, specifically visualization. |
-| `writing-original-draft` | Writing, original draft | Preparation, creation, and presentation of published work, specifically writing the initial draft. |
+| `writing-original-draft` | Writing, original draft | Preparation and presentation of the initial draft. |
 | `writing-review-editing` | Writing, review & editing | Critical review, commentary, or revision of published work. |
 
-**Degree of contribution.** CRediT allows an optional degree qualifier of `lead`, `equal`, or `supporting` when multiple contributors share the same role. Implementations expressing this SHOULD carry the degree in the attestation payload (not in the activity type URI). Example payload field: `"contribution_degree": "lead"`.
+**Degree of contribution.** CRediT allows an optional degree qualifier of `lead`, `equal`, or `supporting`. Implementations SHOULD carry the degree in the attestation payload (not in the URI). Example: `"contribution_degree": "lead"`.
 
-**Attribution note.** SWORN reserves the `credit.niso.org/contributor-roles/` namespace for interoperability. The CRediT taxonomy itself is owned and maintained by NISO. Implementations using these URIs are consuming CRediT, not extending it.
+The CRediT taxonomy itself is owned and maintained by NISO. Implementations using these URIs are consuming CRediT, not extending it.
 
 ### §9.2 source_type registry
 
-The `source_type` field (§2.5) is a u16 whose registered values are given below. Integer positions are stable per §1.4. Future additions append at the next unused integer.
+The `source_type` field (§2.5) is a u16 whose registered values are given below. Integer positions are stable per §1.5. Future additions append at the next unused integer. Additions are additive and do NOT advance `spec_version`.
 
-For each value, this registry specifies:
-
-- **Slug:** the canonical string label.
-- **Description:** what the source represents.
-- **source_hash canonicalization:** how implementations MUST derive `source_hash` for this source_type. Cross-implementation source-identity matching depends on all implementations agreeing on this procedure. Where the procedure is marked `SHOULD`, cross-implementation matching is a best-effort convention.
+For each value, this registry specifies the canonical string label, what the source represents, and how implementations MUST derive `source_hash` for that source_type. Cross-implementation source-identity matching depends on all implementations agreeing on the derivation procedure.
 
 | # | Slug | Description | source_hash canonicalization |
 |---|---|---|---|
@@ -790,54 +673,50 @@ For each value, this registry specifies:
 | 1 | `self_reported` | The signer is asserting a fact about themselves with no external source. | `source_hash` MUST be 32 zero bytes. |
 | 2 | `orcid` | Sourced from an ORCID record. | MUST: `SHA-256` of the 19-character ORCID identifier as ASCII, upper-hyphen form (e.g., `0000-0002-1825-0097`). No scheme, no host, no trailing whitespace. |
 | 3 | `doi` | Sourced from a DOI-resolvable publication. | MUST: `SHA-256` of the bare DOI in lowercase ASCII (e.g., `10.1234/example.5678`). No `doi.org/`, no scheme, no fragment. |
-| 4 | `openalex` | Sourced from an OpenAlex record. | MUST: `SHA-256` of the uppercase OpenAlex ID with type prefix (e.g., `W1234567890`, `A1234567890`). No scheme, no host. |
+| 4 | `openalex` | Sourced from an OpenAlex record. | MUST: `SHA-256` of the uppercase OpenAlex ID with type prefix (e.g., `W1234567890`). No scheme, no host. |
 | 5 | `git_commit` | Sourced from a specific git commit. | MUST: `SHA-256` of the full 40-character lowercase hexadecimal commit SHA. No repo prefix, no branch context. |
-| 6 | `rss_parsed` | Machine-extracted from an RSS/Atom feed. | SHOULD: `SHA-256` of the item's `<guid>` or `<atom:id>` value as UTF-8. Where the feed provides neither, SHOULD use the item's canonical URL after Unicode NFC normalization. |
+| 6 | `rss_parsed` | Machine-extracted from an RSS/Atom feed. | SHOULD: `SHA-256` of the item's `<guid>` or `<atom:id>` value as UTF-8. Where the feed provides neither, `SHA-256` of the item's canonical URL after NFC normalization. |
 | 7 | `open_source_project` | Sourced from a project's declared authorship (CITATION.cff, package metadata, etc.). | SHOULD: `SHA-256` of the primary repository URL (lowercase scheme+host+path). |
-| 8 | `coordinator_confirmed` | A coordinator role in the community affirmed the claim. | SHOULD: `SHA-256(coordinator_signer_pubkey || confirmation_timestamp_int64_le)`. Implementation-specific but MUST be deterministic within an implementation. |
+| 8 | `coordinator_confirmed` | A coordinator role in the community affirmed the claim. | SHOULD: `SHA-256(coordinator_signer_pubkey || confirmation_timestamp_int64_le)`. Deterministic within an implementation. |
 | 9 | `peer_witnessed` | A peer directly witnessed the claimed activity. | MUST: `SHA-256` of the peer's 32-byte SWORN signer pubkey. |
-| 10 | `computed` | The claim was derived algorithmically from other data. | SHOULD: `SHA-256(algorithm_identifier_utf8 || canonicalized_inputs_bytes)`. Implementations SHOULD choose canonicalization such that identical computations produce identical `source_hash` values. |
-| 11 | `system_observed` | The claim is a system-observed fact (attendance record, transaction confirmation, computed platform stat). | SHOULD: `SHA-256(platform_identifier_utf8 || event_id_utf8)`. Implementation-specific. |
-| 12 | `regulatory_filing` | Sourced from a legally-mandated public disclosure (IRS 990, SEC filing, court record, campaign finance filing). | MUST: `SHA-256(filing_type_identifier_utf8 || filing_identifier_utf8)`. E.g., `990:EIN:12345:2024` for an IRS 990 filing, `SEC:accession_number` for an SEC filing. |
-| 13 | `community_curated_db` | Sourced from a community-edited database with revision history (MusicBrainz, Wikidata, OpenStreetMap, Discogs). | MUST: `SHA-256` of the canonical entity URL after Unicode NFC normalization (e.g., `https://musicbrainz.org/artist/<mbid>`, `https://www.wikidata.org/wiki/Q<id>`). |
-| 14 | `external_sworn_attestation` | References another SWORN attestation (federation, cross-implementation graph). | MUST: `SHA-256` of the referenced attestation's canonical byte sequence, as computed per §3.1 of the version that attestation was signed under. Equivalent to the referenced attestation's stable identifier. |
-| 15 | `oauth_authenticated` | The signer's identity was verified by a third-party OAuth provider (GitHub, LinkedIn, Google, ORCID direct, etc.) at attestation time. The identity provider verified control of an account, not the human identity of its owner. See §9.2.1 below for provider identifier conventions. | MUST: `SHA-256("oauth:" \|\| provider_name_utf8 \|\| ":" \|\| provider_user_id_utf8)`. `provider_name` is the registered short name (see §9.2.1); `provider_user_id` is the provider's stable user identifier (e.g., GitHub numeric user ID, not username). |
+| 10 | `computed` | The claim was derived algorithmically from other data. | SHOULD: `SHA-256(algorithm_identifier_utf8 || canonicalized_inputs_bytes)`. |
+| 11 | `system_observed` | The claim is a system-observed fact (attendance record, transaction confirmation, computed platform stat). | SHOULD: `SHA-256(platform_identifier_utf8 || event_id_utf8)`. |
+| 12 | `regulatory_filing` | Sourced from a legally-mandated public disclosure. | MUST: `SHA-256(filing_type_identifier_utf8 || filing_identifier_utf8)` (e.g., `990:EIN:12345:2024` for an IRS 990). |
+| 13 | `community_curated_db` | Sourced from a community-edited database with revision history. | MUST: `SHA-256` of the canonical entity URL after NFC normalization (e.g., `https://musicbrainz.org/artist/<mbid>`). |
+| 14 | `external_sworn_attestation` | References another SWORN attestation (federation, cross-implementation graph). | MUST: `SHA-256` of the referenced attestation's canonical byte sequence, per §3.1 of the version that attestation was signed under. |
+| 15 | `oauth_authenticated` | The signer's identity was verified by a third-party OAuth provider at attestation time. See §9.2.1. | MUST: `SHA-256("oauth:" \|\| provider_name_utf8 \|\| ":" \|\| provider_user_id_utf8)`. |
 
-**Enum evolution.** Additions to this registry (new integer positions) are additive and do NOT advance `spec_version`. Verifiers that encounter a `source_type` value they do not recognize MUST report a version-mismatch condition (distinct from malformed-attestation) so upstream tooling can distinguish "reader is behind" from "attestation is corrupt." Verifiers MUST NOT interpret unknown source_type values as `unknown` (0); the enum is exhaustive at each version.
+**Enum evolution.** Verifiers encountering a `source_type` value they do not recognize MUST report a version-mismatch condition distinct from malformed-attestation. Verifiers MUST NOT interpret unknown source_type values as `unknown` (0); the enum is exhaustive at each version.
 
-#### §9.2.1 OAuth provider names (registered)
+#### §9.2.1 OAuth provider names
 
-`source_type = 15` (`oauth_authenticated`) requires a registered `provider_name` short string. Cross-implementation source-identity matching depends on all implementations spelling the same provider name identically.
+`source_type = 15` (`oauth_authenticated`) requires a registered `provider_name` short string.
 
 | provider_name | Provider | provider_user_id semantics |
 |---|---|---|
-| `github` | GitHub | Numeric user ID (e.g., `12345678`), NOT username. Usernames change; numeric IDs are stable. |
-| `linkedin` | LinkedIn | LinkedIn member ID (stable numeric identifier from the OAuth response). |
-| `google` | Google | `sub` claim from the OAuth ID token (Google's stable per-app user identifier). |
-| `orcid` | ORCID | 19-character ORCID identifier in upper-hyphen form (e.g., `0000-0002-1825-0097`). Distinct from `source_type = 2` (`orcid`): `source_type = 15` with `provider_name = orcid` means "authenticated via ORCID's OAuth flow at attestation time"; `source_type = 2` means "the underlying data came from an ORCID record, provenance-only, no auth event." |
+| `github` | GitHub | Numeric user ID (e.g., `12345678`), NOT username. |
+| `linkedin` | LinkedIn | LinkedIn member ID from the OAuth response. |
+| `google` | Google | `sub` claim from the OAuth ID token. |
+| `orcid` | ORCID | 19-character ORCID identifier in upper-hyphen form. Distinct from `source_type = 2`: this means "authenticated via ORCID's OAuth flow at attestation time"; source_type 2 means "the underlying data came from an ORCID record." |
 
-New providers register additively via the same enum-evolution rule as §9.2. Provider name choice: prefer short lowercase strings matching the provider's own canonical short name; avoid `oauth_` prefix (already implied by the source_type).
-
-**Confidence guidance (non-normative).** OAuth-mediated attestation verifies control of a third-party account, not human identity of its owner. Implementations SHOULD choose `confidence` values that reflect this. `10000` (100%) is inappropriate for any OAuth path because the underlying provider does not verify humanness. A reasonable floor across all OAuth providers is `7000-8000` (70-80%); providers with stronger identity verification workflows (e.g., verified organizational accounts, KYC-linked providers) MAY choose higher values with documented rationale per §1.5.
-
-**Rationale for a generic `oauth_authenticated` slot.** OAuth-mediated identity is a recurring pattern with a common shape: a third-party provider mediates the login, the signer's identity in the attestation is tied to their account with that provider. Rather than proliferating per-provider source_type values (`github_oauth`, `linkedin_oauth`, `google_oauth`, and so on ad infinitum), the registry keeps a single slot and encodes the provider context in the payload. This preserves cross-implementation legibility (one slot to reason about) while letting implementations add new OAuth providers via the §9.2.1 registry without spec bumps.
+**Confidence guidance (non-normative).** OAuth-mediated attestation verifies control of a third-party account, not human identity of its owner. `10000` (100%) is inappropriate for any OAuth path. A reasonable floor across all OAuth providers is `7000-8000` (70-80%).
 
 ### §9.3 witnessing_depth registry
 
-The `witnessing_depth` field (§2.5) is a u8. Integer positions are stable per §1.4.
+The `witnessing_depth` field (§2.5) is a u8. Integer positions are stable per §1.5.
 
 | # | Slug | Meaning |
 |---|---|---|
 | 0 | `unspecified` | Depth not classified. Legitimate for backfilled records or where the signer chooses not to characterize. |
 | 1 | `physically_observed` | The signer was present when the claimed activity occurred and directly witnessed it. |
-| 2 | `reviewed_artifacts` | The signer inspected outputs (code, papers, receipts, records) after the fact and forms the claim from that inspection. |
-| 3 | `ui_confirmed` | The signer confirmed the claim through a user-interface action (e.g., pressed a button in a client application) without deeper inspection. |
+| 2 | `reviewed_artifacts` | The signer inspected outputs (code, papers, receipts, records) after the fact. |
+| 3 | `ui_confirmed` | The signer confirmed the claim through a user-interface action (e.g., pressed a button) without deeper inspection. |
 | 4 | `computed_match` | The signer is a machine process that produced the claim by matching against reference data. |
 | 5 | `self_asserted` | The subject and signer are the same party; no separate witnessing occurred. |
 
 ### §9.4 attestor_relationship registry
 
-The `attestor_relationship` field (§2.5) is a u8. Integer positions are stable per §1.4.
+The `attestor_relationship` field (§2.5) is a u8. Integer positions are stable per §1.5.
 
 | # | Slug | Meaning |
 |---|---|---|
@@ -851,21 +730,21 @@ The `attestor_relationship` field (§2.5) is a u8. Integer positions are stable 
 
 ### §9.5 Signature algorithm registry
 
-Ed25519 is the sole registered signature algorithm in v0.1. Future versions may register additional algorithms per §3.3.
+Ed25519 is the sole registered signature algorithm in v0.2. Future versions may register additional algorithms per §3.3.
 
 ### §9.6 Notarization substrate registry
 
-Substrate choice is implementation-defined; interoperability of hash-anchor commitments across substrates is achieved by the substrate identifier appearing in implementation binding documentation (Appendix A, B). Future versions may formalize this registry.
+In v0.2 the sole registered notarization substrate is Solana Attestation Service (SAS) as defined in bindings/sas.md. Future versions may formalize this registry to accommodate additional substrates.
 
 ---
 
 ## §10 Conformance
 
-Conformance to SWORN v0.1-final is defined by what an implementation can produce, consume, and refuse. This section spells out three levels of conformance (§10.1), the interoperability tests every level MUST pass (§10.2), the current state of the registration process (§10.3), and the reference test vectors that anchor cross-implementation verification (§10.4).
+Conformance to SWORN v0.2 is defined by what an implementation can produce, consume, and refuse.
 
 ### §10.1 Conformance levels
 
-An implementation MAY conform to SWORN v0.1-final at one of three levels. Each higher level entails all lower levels.
+An implementation MAY conform at one of three levels. Each higher level entails the lower ones.
 
 **Level 1: Verifier.** An implementation that can consume, validate, and reason about attestations produced by any other conforming implementation. A verifier MUST:
 
@@ -874,177 +753,94 @@ An implementation MAY conform to SWORN v0.1-final at one of three levels. Each h
 - Recompute `SHA-256(canonicalize(payload)) == data_hash` per §2.3 and §2.4 when a payload is present.
 - Recompute `SHA-256(canonical source identifier)` per §9.2's per-source-type canonicalization when checking source integrity.
 - Recompute `SHA-256(target_canonical_bytes)` when interpreting revocation references per §4.3.
-- Reject attestations whose `spec_version` marker (§3.1) is unknown to the implementation, distinguishing that failure from signature invalidity per §9.2's fail-closed rule.
+- Reject attestations whose `spec_version` marker (§3.1) is unknown to the implementation, distinguishing that failure from signature invalidity.
 - Refuse enumeration and bulk-retrieval operations at any Layer 5 endpoint per §6.4.
 
-A verifier implementation MAY be embedded in a browser, a library, a command-line tool, or a service; the deployment shape is not constrained.
+A verifier MAY be embedded in a browser, a library, a command-line tool, or a service.
 
 **Level 2: Signer.** A verifier that also produces new attestations. A signer MUST additionally:
 
 - Construct canonical byte sequences that pass byte-for-byte verification against §10.4's reference vectors.
-- Generate cryptographically-secure nonces per §3.4.
+- Generate nonces per §3.4's uniqueness and unpredictability rules.
 - Self-verify its own signatures before publishing them, catching client-side signing bugs before they propagate.
 - Populate provenance fields per §2.5, including the zero-hash rule for sourceless `source_type` values (§2.4) and the range and enum constraints (§9.2 through §9.4).
-- Honor §1.5's non-transferability firewall for any product surface derived from the signer's attestations.
 
-**Level 3: Notarizer.** A signer that also anchors attestations to a public substrate per Layer 4. A notarizer MUST additionally:
+**Level 3: Notarizer.** A signer that also anchors attestations to Solana Attestation Service per bindings/sas.md. A notarizer MUST additionally:
 
-- Publish `data_hash`, `signer` (or a resolvable identifier for the signer), and monotonic timestamp per §5.1.
-- Independently recompute `attestation_hash = SHA-256(canonical_bytes)` before anchoring, rather than trusting an upstream implementation's hash.
-- Guarantee the anchored hash's durability per §5.4 (no mutation, revocation, or reversal at the substrate layer).
-- Provide a Layer 5 verification endpoint that lets external callers independently recompute the hash and compare to the anchored record.
-
-An implementation MAY declare conformance at Level 1 (verifier), Level 1+2 (signer), or Level 1+2+3 (notarizer). Declarations at levels below the implementation's actual capability are acceptable and useful; an implementation that can sign but chooses to expose only verification is a valid Level 1 declaration. Declarations above the implementation's actual capability are non-conforming.
+- Publish the notary record satisfying §5.1's requirements, using the PDA derivation from bindings/sas.md §3.
+- Not invoke the forbidden SAS instructions listed in bindings/sas.md §4.
+- Provide independent hash recomputation as required by §5.1.
 
 ### §10.2 Interoperability tests
 
-An implementation is interoperable with SWORN v0.1-final when it passes all applicable tests below. Applicability follows the level declared per §10.1.
+Every level MUST pass the golden-vector suite at fixtures/attestations/. Vectors are byte-exact: an implementation whose serializer produces different bytes than the vectors for the same inputs is not conforming.
 
-**T-1 (Verifier, required).** Given each vector in `fixtures/attestations/v0.1-final/vectors.json`, the implementation MUST reconstruct `expected_canonical_bytes_hex` byte-for-byte from `input_fields` and MUST verify `expected_signature_hex` against the reconstructed bytes using `signer_secret_seed_hex`'s corresponding public key.
+Notarizers MUST additionally pass the SAS binding test suite at fixtures/tests/sas/. Signers and verifiers MUST additionally pass the HTTP conformance test suite at fixtures/tests/http/ against their Layer 5 endpoint.
 
-**T-2 (Verifier, required).** Given a tampered attestation (any single byte of the canonical byte sequence altered post-signing), the implementation MUST report signature verification failure.
+### §10.3 Registration process
 
-**T-3 (Verifier, required).** Given a valid attestation whose payload has been altered (data_hash still committed to the original payload), the implementation MUST distinguish signature validity (holds) from payload integrity (fails).
+There is no central registry of conforming implementations in v0.2. An implementation MAY self-declare conformance by:
 
-**T-4 (Verifier, required).** Given a request to enumerate attestations by signer, subject, or arbitrary attribute, the implementation MUST refuse the request per §6.4. The refusal MUST be an explicit error, not a silent unsupported-feature response.
+- Passing the golden-vector suite for its declared level.
+- Publishing the passing test output alongside the implementation's source repository.
+- Documenting its Layer 4 substrate binding (for notarizers) or its Level 1-2 partial-conformance status (for signers-without-notarization).
 
-**T-5 (Signer, required).** For every reference vector, the implementation MUST produce byte-identical canonical bytes and byte-identical signatures when given the same `input_fields` and `signer_secret_seed_hex`. This is the property that makes the reference vectors testable across implementations.
-
-**T-6 (Signer, required).** An attempt to sign with a `source_type` value of `unknown` (0) or `self_reported` (1) combined with a nonzero `source_hash` MUST fail before signing. See §2.4.
-
-**T-7 (Signer, required).** An attempt to sign with a `confidence` value greater than 10000 basis points, a `source_type` value outside the §9.2 registry, a `witnessing_depth` outside §9.3, or an `attestor_relationship` outside §9.4 MUST fail before signing.
-
-**T-8 (Notarizer, required).** Given an attestation from a different conforming implementation, the notarizer MUST independently recompute `attestation_hash = SHA-256(canonical_bytes)` from the source fields, MUST NOT trust an upstream implementation's precomputed hash, and MUST anchor the recomputed value.
-
-**T-9 (Notarizer, required).** The notarizer's substrate MUST NOT expose a path to mutate, revoke, or reverse an anchored hash. If the underlying substrate provides such a path (e.g., a hypothetical rent-reclamation or unpublish instruction), the notarizer MUST NOT call it for SWORN-anchored records.
-
-Additional tests MAY be added by implementations that surface novel edge cases; those tests SHOULD be contributed back to the reference test-vector set (§10.4) so other implementations can benefit.
-
-### §10.3 Registration process (or self-declaration during RFC period)
-
-During the RFC period, conformance is self-declared. An implementation that passes the applicable §10.2 tests MAY declare itself conforming to SWORN v0.1-final at the appropriate level. No central authority reviews or approves conformance declarations at this stage; the mechanism the specification defines (attestations, verifiable by any party against the reference vectors) is expected to sort correct declarations from incorrect ones over time.
-
-An implementer wishing to publish a conformance declaration SHOULD:
-
-- Name the implementation and its version.
-- Declare the conformance level per §10.1.
-- Reference the specific SWORN version (e.g., v0.1-final at commit hash X).
-- Publish the results of the applicable §10.2 tests, ideally as a reproducible test-suite invocation.
-- Sign the declaration itself as a SWORN attestation, with the implementation's project or maintainer identity as the signer.
-
-Signing the declaration is not required for conformance, but it is the pattern the specification recommends: an implementation that claims to implement SWORN can prove that claim by using the mechanism SWORN defines.
-
-A formal registration process, including a conformance mark and a public conformance registry, is reserved for a future specification version. The mark and the registry are properties of the specification's steward, not of any individual implementation.
+A formal registration process is reserved for a future version once implementer adoption justifies it.
 
 ### §10.4 Reference test vectors
 
-Cross-implementation verification is anchored by golden test vectors published alongside this specification at `fixtures/attestations/v0.1-final/` in the [extol-work/sworn](https://github.com/extol-work/sworn) repository. Each vector specifies:
+The canonical set of test vectors lives at fixtures/attestations/v0.2/vectors.json in the specification repository. Each vector specifies:
 
-- `input_fields`: the full set of attestation fields per §2.1.
-- `expected_canonical_bytes_hex`: the 248-byte canonical byte sequence per §3.1, in hexadecimal.
-- `expected_signature_hex`: the 64-byte Ed25519 signature over the canonical bytes, in hexadecimal.
-- `notes`: what the vector exercises (edge cases, provenance shape, etc.).
+- inputs for constructing an attestation;
+- the expected canonical byte sequence in hex;
+- the expected Ed25519 signature under a specified test key;
+- the expected `attestation_hash` (SHA-256 of canonical bytes).
 
-A conforming implementation MUST reproduce `expected_canonical_bytes_hex` and `expected_signature_hex` byte-for-byte from `input_fields` for every published vector. Any deviation indicates a serialization, canonicalization, or signing bug that would break cross-implementation verification.
+Implementations MUST produce byte-identical canonical sequences and hash values for the specified inputs. An implementation whose output differs from any vector is not conforming.
 
-Implementations SHOULD contribute additional vectors as they discover edge cases in production use.
+Vectors cover the meaningful edge cases: sourceless attestations (source_type ∈ {0, 1}), sourced attestations across each registered source_type, revocations, and attestations with each combination of witness_for-populated and unpopulated states.
 
 ---
 
-## Appendix A: Solana / SAS binding (informative)
+## Appendix A: Publication history
 
-Extol, Inc. maintains the first production adopter of SWORN as an on-chain implementation using Solana Attestation Service (SAS) as the notarization substrate (§5.1). The full binding documentation lives with Extol's implementation and is not duplicated here. This appendix captures the properties that binding must satisfy to remain conforming, so future Solana-substrate implementations can align.
+**v0.2 (this document).** Substantial revision from v0.1-final following external review. The canonical byte sequence advances `spec_version` from 2 to 3. The rename `created_at` → `signer_asserted_at` reflects the field's semantics as the signer's claim rather than an authoritative timestamp. The Layer 4 notary requirements now include the non-walkability discipline of §5.1 and require the SAS binding of bindings/sas.md for full conformance. The `sworn.dev/v1/revocation` activity type is now registered rather than reserved. §1.5 (previous non-transferability firewall) is retired; §1.4 lists non-goals. All references to specific applications built on SWORN move to PRIMER.md.
 
-**Substrate obligations.** SAS anchoring publishes `attestation_hash = SHA-256(canonical_bytes)` as a Solana PDA whose account data contains the hash and the signer's public key. This satisfies §5.1's publication requirement. The PDA's slot / block-time gives the monotonic timestamp §5.1 requires. Signer independence is preserved because SAS anchoring is a Solana transaction submitted by an anchoring service, not by the signer; the signer's Ed25519 key never appears in a Solana transaction as a transaction signer for anchoring purposes.
+**v0.1-final.** Added five provenance fields (`source_hash`, `source_type`, `confidence`, `witnessing_depth`, `attestor_relationship`) to the canonical byte sequence and prefixed the sequence with an explicit `spec_version` marker. Canonical byte length grew from 208 bytes to 248 bytes. Under review; not published for external signing.
 
-**Substrate discipline.** A Solana-substrate implementation MUST NOT invoke any hypothetical SAS instruction that unpublishes, mutates, or reverses a hash anchor, even if the substrate exposes such an instruction. This is a spec-level obligation per §5.4 and §10.2 (T-9). SAS's current design is append-only, which aligns with SWORN's requirements natively; future Solana features that break this alignment would be off-limits for SWORN records regardless of what else they enable.
+**v0.1-preview.** Initial draft. Under review; not published for external signing.
 
-**Substrate-specific concerns not covered here:** PDA seed schema, account layout, compute-budget optimization, priority-fee policy, indexing patterns via Geyser or Helius. All of these are Solana-implementation detail that live in the reference implementation's documentation, not in this specification.
+## Appendix B: Glossary
 
-## Appendix B: Postgres binding (informative)
+**Activity type.** URI naming the class of claim being made.
 
-The reference implementation at [extol-work/sworn-postgres](https://github.com/extol-work/sworn-postgres) uses Postgres as the notarization substrate. Full implementation documentation lives with that repository; this appendix captures the binding shape so future non-blockchain substrate implementations (git-anchored logs, certificate-transparency logs, other append-only databases) can align on the pattern.
+**Attestation.** Signed statement by one party about another party or artifact.
 
-**Substrate obligations.** The reference implementation stores each attestation as a row in an append-only `attestations` table. The row carries the full attestation content (signer, subject, provenance fields, canonical bytes, signature). `attestation_hash = SHA-256(canonical_bytes)` is derived on demand rather than stored separately. Append-only semantics are enforced by convention (no UPDATE or DELETE paths exposed by the application) rather than by database-level triggers; a production deployment MAY strengthen this with role-based revocation of UPDATE and DELETE privileges on the table.
+**Attestation hash.** `SHA-256(canonical_bytes)`. The identifier by which the notary publishes an attestation and by which revocations reference their targets.
 
-**Substrate discipline.** A Postgres-substrate implementation MUST NOT provide operational tooling that mutates or deletes attestation rows post-insert, even for administrative convenience. Retention-hint-driven payload reclamation (§5.5) is the sole exception and touches only the `payload` column, never the fields covered by the signature.
+**Canonical bytes.** The 248-byte sequence defined in §3.1 that is passed to Ed25519.sign.
 
-**Reference implementation status.** The `sworn-postgres` implementation is a Layer 5 Notarizer per §10.1 conformance levels. It passes T-1 through T-9 of the §10.2 interoperability tests as executed by the conformance runners at `fixtures/tests/rust/` in this repository.
+**Canonicalization.** Deterministic serialization per RFC 8785 for JSON payloads (§2.3) or per §9.2 for source identifiers.
 
-**Substrate-specific concerns not covered here:** SQL schema, indexing strategy, connection pooling, backup and disaster-recovery posture. All live in the reference implementation's documentation.
+**Ed25519.** The signature algorithm specified in RFC 8032, used in PureEdDSA form throughout SWORN.
 
-## Appendix C: Worked examples
+**Notarization substrate.** The public tamper-evident ledger where attestation hashes are committed. Solana Attestation Service in v0.2.
 
-- **Individual attestation, self-reported.** Single subject, single signer, `source_type = self_reported`, `witnessing_depth = self_asserted`, `attestor_relationship = self`. Baseline case.
-- **ORCID-authored research paper attestation.** Subject is a paper, signer is the author, `source_type = orcid`, `witnessing_depth = computed_match` (name-matching against ORCID record), `attestor_relationship = self`. `confidence = 9500` for the identity match.
-- **CRediT contribution role for the same paper.** Subject is the same paper, signer is the same author, `activity_type = credit.niso.org/contributor-roles/data-curation`, `source_type = self_reported`, `witnessing_depth = self_asserted`. `confidence = 8000` (author's own assessment of their role). Illustrates why one paper needs multiple attestations: the ORCID authorship attestation and the CRediT role attestation carry different provenance and different confidence, and combining them into one record would misrepresent either or both.
-- **Peer-witnessed contribution.** Subject is a person, signer is a peer, `source_type = peer_witnessed`, `witnessing_depth = physically_observed`, `attestor_relationship = peer`. High trust artifact.
-- **Batched attestation (Merkle-root, many subjects).** See §5.2.
-- **Additive revocation.** New attestation, `activity_type = sworn.dev/v1/revocation`, `subject = target_attestation_id`, signed by the same signer as the target.
-- **Cross-implementation verification.** Postgres-signed attestation verified by a Solana implementation. Signatures match because `canonical_bytes` are identical byte-for-byte; substrate is irrelevant to signature verification.
+**Payload.** Semantic content of the attestation; JSON object canonicalized per §2.3 and hashed as `data_hash`.
 
-## Appendix D: Glossary
+**Provenance.** The signer's claim about origin and method, captured by `source_type`, `source_hash`, `confidence`, `witnessing_depth`, `attestor_relationship`.
 
-Terms defined normatively elsewhere in the specification are cross-referenced back to their defining section.
+**Signer.** The Ed25519 public key that produced an attestation's signature.
 
-**Anchor / Anchoring.** The act of publishing an `attestation_hash` to the notarization substrate. See §5.1.
+**Standing.** The accumulated record of attestations by and about a signer, treated as a graph rather than as a value.
 
-**Attestation.** A signed statement by one party (the signer) about another party or artifact (the subject). See §1.2 and §2.1.
+**Subject.** The entity being attested about.
 
-**Attestation hash.** `SHA-256(canonical_bytes)`. The 32-byte value used to cross-reference attestations across implementations and to anchor to substrates. See §5.1.
+## Appendix C: Substrate bindings
 
-**Attestor relationship.** A signed enum (§9.4) capturing the signer's relationship to the subject at time of attestation. Snapshot, not live state. See §2.5.
+The following bindings live in the specification repository. Bindings other than the SAS binding are informative and do not provide Layer 4 conformance.
 
-**Backfilled provenance.** Provenance data populated during migration from v0.1-preview to v0.1-final. Distinguished from original provenance via an off-chain `provenance_origin` flag. See §2.8.
+- **bindings/sas.md** (Solana Attestation Service). Normative. Defines credential and schema layout, PDA seed derivation, forbidden instructions, and account data layout. Required for Level 3 (Notarizer) conformance.
+- **bindings/postgres.md** (Postgres via [extol-work/sworn-postgres](https://github.com/extol-work/sworn-postgres)). Informative. Documents a Layer 1 + Layer 2 partial-conformance implementation that produces signed attestations without publishing them to a substrate.
 
-**Canonical bytes.** The 248-byte sequence over which the Ed25519 signature is computed. Fully specified in §3.1.
-
-**Canonical source identifier.** The normalized form of an external source identifier used as input to SHA-256 to produce `source_hash`. Per-source-type rules registered in §9.2.
-
-**Confidence.** A u16 in basis points (0 to 10000) expressing the signer's own estimate of the claim's strength at signing time. See §2.5.
-
-**Conforming implementation.** Any software that satisfies the required text of the conformance level it declares. See §10.1.
-
-**Data hash.** `SHA-256(canonicalized JSON payload)`. Commits to the payload's semantic content without requiring the payload be public. See §2.4.
-
-**Derived signal.** A ranking, tier, score, or other interpretation computed from the attestation graph. NOT an attestation. Subject to §1.5's transparency requirement where converted to value.
-
-**Disclosure token.** A single-use, time-limited authorization for payload retrieval, produced by the signer of the target attestation. See §6.3.
-
-**Layer.** One of five ordered abstractions (Testimony, Signing, Registry, Notarization, Presentation) that structure SWORN. See §1.3.
-
-**Nonce.** A 32-byte value ensuring signature uniqueness across otherwise-identical attestation content. See §3.4.
-
-**Notarization substrate.** The public, tamper-evident record where attestation hashes are anchored. May be a blockchain, an append-only database, a certificate-transparency log, or equivalent. See §5.1.
-
-**Original provenance.** Provenance data populated at the time of the original attestation, distinguished from backfilled provenance via `provenance_origin` metadata. See §2.8.
-
-**Payload.** The semantic content of the attestation. Not signed directly; only its hash is. See §1.2 and §2.4.
-
-**Provenance.** The signer's claim about the origin and epistemic depth of an attestation, captured by `source_hash`, `source_type`, `confidence`, `witnessing_depth`, and `attestor_relationship`. Signed content. See §2.5.
-
-**Revocation.** An additive attestation whose `activity_type` resolves to a revocation-class schema and whose `subject` is `SHA-256` of the target attestation's canonical bytes. See §4.3.
-
-**Signer.** The Ed25519 public key that produced an attestation's signature. Exactly the public key; nothing else. See §1.2 and §4.1.
-
-**Source hash.** `SHA-256(canonical source identifier)` per §9.2. Zero bytes when `source_type ∈ {unknown, self_reported}`. See §2.4.
-
-**Source type.** A registered u16 enum (§9.2) identifying the kind of source the signer relied on.
-
-**Spec version.** A u16 at position 0 of the canonical byte sequence, identifying which SWORN spec revision the attestation was signed against. Value 2 = v0.1-final; value 1 = deprecated v0.1-preview. See §3.1.
-
-**Standing.** The accumulated graph of attestations signed by and naming a signer. Not a score. Not a token. Not transferable. See §1.5, §4.4.
-
-**Subject.** The entity being attested about. May be a pubkey, a content hash, or an activity-type-defined 32-byte identifier. See §2.5.
-
-**Verifier.** Any party that reads an attestation and checks its authenticity. Distinct from signer and subject. Also called a reader.
-
-**Witnessing depth.** A registered u8 enum (§9.3) capturing the epistemic depth of the witnessing act itself. Orthogonal to source type. See §2.5.
-
-## Appendix E: Changelog
-
-**v0.1.1** (2026-08-06, additive): registered `oauth_authenticated` (source_type = 15) in §9.2 with the §9.2.1 OAuth provider names sub-registry (`github`, `linkedin`, `google`, `orcid`). Canonical byte layout unchanged; no signature-compatibility break; existing v0.1-final vectors and signatures remain valid without re-issuance. Additive registry evolution per §9.2's "Enum evolution" rule.
-
-**v0.1-final** (this document): added `spec_version`, `source_hash`, `source_type`, `confidence`, `witnessing_depth`, `attestor_relationship` to canonical bytes. Extended canonical byte length from 208 to 248. Added §9.2, §9.3, §9.4 registries. Added §2.5 (provenance fields), §2.5.1 (signer's claim not verifier's guarantee), §2.5.2 (dedup semantics), §2.8 (source license and off-chain metadata), §10.4 (reference test vectors). Added the "sourceable" property to §1.1.
-
-**v0.1-preview** (deprecated): initial nine-field attestation record without provenance. Canonical byte length 208. Superseded by v0.1-final during the pre-review window; no external reviewer attested to v0.1-preview bytes.
+An implementation MAY use another substrate for Layers 1 and 2 storage while still producing SWORN-conforming attestations; such an implementation is not a Level 3 Notarizer under v0.2.
