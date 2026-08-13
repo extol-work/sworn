@@ -1,8 +1,8 @@
 # Attestation Notary Specification
 
-**Draft v0.2.** Under review. Not yet accepting external signatures.
+**Draft v0.2. Under review.**
 
-A specification for signed factual claims and their notarization to a public substrate. Testimony that a verifier can check without asking the platform of origin.
+A specification for signed factual claims and their notarization to a public substrate. The notary publishes an opaque hash and a timestamp: enough for any verifier to confirm an attestation existed at a specific time, not enough for anyone to walk the substrate into a directory of who signed what about whom.
 
 ## What this specification defines
 
