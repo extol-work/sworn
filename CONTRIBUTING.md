@@ -1,48 +1,44 @@
-# Contributing to SWORN
+# Contributing
 
-SWORN is under RFC review during v0.1. Contributions are welcome across several distinct paths.
+This specification is under review at draft v0.2. Contributions are welcome across several paths.
 
-## Attesting to the spec
+## Proposing changes to the specification
 
-The primary form of contribution during the RFC period. See [RFC.md §Attesting to the spec](./RFC.md#attesting-to-the-spec).
+Open a PR against `SPEC.md` (normative) or `PRIMER.md` (rationale). Include:
 
-If your attestation endorses the spec, disagrees with a section, or proposes an amendment, feel free to open a PR that references it so the discussion has a natural home. Do not submit textual endorsements. Submit signatures.
+- The change you are proposing.
+- The rationale (why the current text is insufficient or incorrect).
+- Which implementations you have tested the change against, if any.
+- Whether the change is backwards-compatible with the current byte layout at `spec_version = 3`.
 
-## Proposing spec changes
-
-Open a PR against `SPEC.md` (or the relevant section file once we split it). Include:
-
-- The change you're proposing
-- The rationale (why the current text is insufficient)
-- Which implementations you've tested the change against, if any
-- Whether the change is backwards-compatible with v0.1 as currently drafted
-
-For substantive changes (anything touching required MUST/MUST NOT/SHOULD language), also open a companion discussion in Issues so the reasoning has a durable home outside PR diff view.
+For substantive changes (anything touching MUST/MUST NOT/SHOULD language), also open a companion discussion in Issues so the reasoning has a durable home outside PR diff view. Changes that advance `spec_version` are gated on cross-implementation review.
 
 ## Reporting spec ambiguity
 
-If you tried to implement SWORN and hit a place where the spec was ambiguous, meaning two conforming implementations would disagree or the spec doesn't say what to do in a specific edge case, open an issue with the `ambiguity` label. Include:
+If you tried to implement the specification and found a place where the text was ambiguous (two conforming implementations would disagree, or the specification does not say what to do in a specific edge case), open an issue with the `ambiguity` label. Include:
 
-- The exact spec text that was ambiguous
-- The two (or more) interpretations you considered
-- Which one your implementation chose, and why
+- The exact spec text that was ambiguous.
+- The two or more interpretations you considered.
+- Which one your implementation chose, and why.
 
-Ambiguity reports are the highest-leverage contributions we can receive during RFC review.
+Ambiguity reports are the highest-leverage contribution during the review period.
 
-## Reference implementation contributions
+## Reference implementations
 
-Not this repo. See [extol-work/sworn-postgres](https://github.com/extol-work/sworn-postgres) for the reference implementation, and its own CONTRIBUTING.md.
+The specification is anchored by cross-implementation vectors in `fixtures/`. Three implementations currently agree byte-for-byte on those vectors. A new implementation demonstrating agreement on the vectors, in a language not yet represented, is a valuable contribution.
 
-## What we're deliberately not looking for
+Implementation code lives in its own repository. See [extol-work/sworn-postgres](https://github.com/extol-work/sworn-postgres) for the Postgres binding and its own CONTRIBUTING.md.
 
-- Additions to v0.1 scope that could live in a companion spec (see [OPEN_QUESTIONS.md](./OPEN_QUESTIONS.md) for what's deferred and why)
-- Bikeshedding on names (the name is `SWORN`; the acronym expands to Signed, Witnessed, Open, Recorded, Non-transferable; these are locked for v0.1)
-- Voting math, token economics, or governance weight function proposals (out of spec scope by design)
+## What this repository does not accept
+
+- Additions to v0.2 scope that could live in a companion specification. See [OPEN_QUESTIONS.md](./OPEN_QUESTIONS.md) for what has been deferred and why.
+- Naming discussions. See PRIMER's historical note on the retired SWORN name.
+- Voting math, token economics, or governance weight function proposals. Out of scope by design.
 
 ## Code of conduct
 
-Standard applies: no personal attacks, no bad-faith engagement, no vendor sniping. Disagreement is welcome; disrespect is not. If you're not sure whether something crosses the line, don't send it.
+Standard applies: no personal attacks, no bad-faith engagement, no vendor sniping. Disagreement is welcome; disrespect is not. If you are not sure whether something crosses the line, do not send it.
 
 ## Provenance and credit
 
-Contributors whose spec changes land in a required section will be credited by public key in the CHANGELOG and, if they wish, by name in a `CONTRIBUTORS.md` file added to the repo. Attestations to the spec speak for themselves. They're already in the graph.
+Contributors whose changes land in normative text will be credited by public key in the changelog and, if they wish, by name in a `CONTRIBUTORS.md` file.

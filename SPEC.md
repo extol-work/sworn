@@ -1,6 +1,6 @@
-# SWORN Specification v0.2
+# Attestation Notary Specification, draft v0.2
 
-**Status:** RFC Draft. Under revision from v0.1-final following review; not yet accepting signatures against this text.
+**Status:** Draft. Under revision from v0.1-final following review; not yet accepting signatures against this text.
 
 **Notation.** The words MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY carry their RFC 2119 meaning throughout.
 
@@ -12,15 +12,15 @@
 
 ### §1.1 What this specifies
 
-SWORN specifies how a signer produces a signed statement of fact, how that statement's cryptographic identity is committed to a public ledger, and how a later verifier confirms both the signature and the ledger commitment without trusting the platform that produced the statement.
+This specification defines how a signer produces a signed statement of fact, how that statement's cryptographic identity is committed to a public ledger, and how a later verifier confirms both the signature and the ledger commitment without trusting the platform that produced the statement.
 
-A conforming SWORN attestation has three properties:
+A conforming attestation has three properties:
 
 - **Signed.** A specific signing key produced a signature over a specific canonical byte sequence.
 - **Notarized.** The attestation's identifying hash is committed to a public, tamper-evident substrate at a substrate-native timestamp any verifier can read.
 - **Independently verifiable.** Any party holding the attestation and the substrate's public state can confirm both properties without further permission or coordination.
 
-That is the whole specification. Interpretations of the attestation, its social meaning, its relationship to reputation or reward, and any use to which it is put by a downstream application, are all outside the specification. See §1.4 for the non-goals SWORN explicitly does not undertake.
+That is the whole specification. Interpretations of the attestation, its social meaning, its relationship to reputation or reward, and any use to which it is put by a downstream application, are all outside the specification. See §1.4 for the non-goals this document explicitly does not undertake.
 
 ### §1.2 Terminology
 
@@ -28,7 +28,7 @@ That is the whole specification. Interpretations of the attestation, its social 
 
 **Signer.** The Ed25519 public key that produced an attestation's signature. Signer identity is exactly the public key. Any mapping between a signer and a real-world person or organization is outside this specification.
 
-**Subject.** The entity being attested about. May be another SWORN signer's public key, an arbitrary public key, or a 32-byte content hash. The interpretation is defined by the attestation's activity type schema.
+**Subject.** The entity being attested about. May be another conforming signer's public key, an arbitrary public key, or a 32-byte content hash. The interpretation is defined by the attestation's activity type schema.
 
 **Payload.** The semantic content of the attestation. A JSON object whose shape is defined by the activity type. The payload is not signed as bytes; the payload's canonicalized hash is.
 
@@ -42,7 +42,7 @@ That is the whole specification. Interpretations of the attestation, its social 
 
 ### §1.3 Layer model
 
-SWORN is organized in five layers. A conforming implementation MUST implement all five.
+This specification is organized in five layers. A conforming implementation MUST implement all five.
 
 - **Layer 1, Testimony (§2).** The structure of an attestation record.
 - **Layer 2, Signing (§3).** How an attestation is bound to a signer.
@@ -52,13 +52,13 @@ SWORN is organized in five layers. A conforming implementation MUST implement al
 
 A partial-conformance implementation MAY implement Layers 1 and 2 only, without publishing to a substrate. Such an implementation produces signed attestations that any Layer 4 party can later notarize; it does not itself provide the notarization property.
 
-### §1.4 What SWORN does not specify
+### §1.4 What this specification does not specify
 
-SWORN does not define any of the following. Any product built on SWORN that offers these properties does so above the specification, in its own documentation and under its own terms.
+This specification does not define any of the following. Any product built on this specification that offers these properties does so above the specification, in its own documentation and under its own terms.
 
-- **Witnessing as a protocol operation.** SWORN produces signed statements by one party. A `witness_for` field exists in the record (§2.6) as an optional pointer to another party, but the protocol does not run a two-party ceremony and does not enforce anything about the referenced party's participation. Applications that want multi-party witnessing build it above SWORN as composition of independent attestations.
+- **Witnessing as a protocol operation.** The specification produces signed statements by one party. A `witness_for` field exists in the record (§2.6) as an optional pointer to another party, but the protocol does not run a two-party ceremony and does not enforce anything about the referenced party's participation. Applications that want multi-party witnessing build it above this specification as composition of independent attestations.
 
-- **Non-transferability.** A signed byte sequence is copyable and portable by its nature. SWORN does not define an owner field, a transfer instruction, or any mechanism that would make one attestation belong to one key more than another. The v1 Solana binding forbids the tokenize and close instructions on the underlying SAS attestations (bindings/sas.md §4), which prevents the substrate itself from expressing transfers or deletions; it does not prevent an application from constructing derived assets that reference SWORN attestations. Non-transferability at the product layer is application policy, not specification property.
+- **Non-transferability.** A signed byte sequence is copyable and portable by its nature. This specification does not define an owner field, a transfer instruction, or any mechanism that would make one attestation belong to one key more than another. The Solana binding forbids the tokenize and close instructions on the underlying SAS attestations (bindings/sas.md §4), which prevents the substrate itself from expressing transfers or deletions; it does not prevent an application from constructing derived assets that reference these attestations. Non-transferability at the product layer is application policy, not specification property.
 
 - **A scoring, ranking, or aggregate quality function.** The graph of attestations is a public record. Interpretations of it (how to weigh peer-witnessed against computed-match provenance, how to decay older attestations, how to compose several corroborations) belong to readers. Two implementations reading the same graph may compute different derived signals for legitimate reasons.
 
@@ -179,7 +179,7 @@ Reference attestations (patterns such as `activity_type = correction | dispute |
 
 The **`subject`** field is 32 bytes interpreted as one of:
 
-- an Ed25519 public key of another SWORN signer;
+- an Ed25519 public key of another conforming signer;
 - a content hash;
 - an equivalent 32-byte identifier defined by the activity type's schema.
 
@@ -325,7 +325,7 @@ Layer 3 defines what a signer is, how signer identity persists, and how signers 
 
 ### §4.1 Signer identity
 
-A signer is a single Ed25519 public key. There is no registration step, no directory service, and no central issuer. Any party holding an Ed25519 private key can produce a conforming SWORN attestation.
+A signer is a single Ed25519 public key. There is no registration step, no directory service, and no central issuer. Any party holding an Ed25519 private key can produce a conforming attestation.
 
 Implementations MUST NOT require signer pre-registration as a condition of accepting an attestation. Rate limiting, quota enforcement, and admission control at the transport layer (§6.5) are separate concerns.
 
@@ -341,7 +341,7 @@ Signers MAY hold multiple distinct keys and use them in different contexts. Each
 
 ### §4.3 Revocation by additive attestation
 
-SWORN has no on-chain mutation of prior attestations. Revocation is expressed by signing a new attestation that references the target.
+This specification has no on-chain mutation of prior attestations. Revocation is expressed by signing a new attestation that references the target.
 
 **Required convention.** An attestation whose `activity_type` URI is `https://sworn.dev/v1/revocation` and whose `subject` is `SHA-256(target_canonical_bytes)` constitutes a revocation of the referenced target attestation by the signing party.
 
@@ -413,7 +413,7 @@ This is the discipline that keeps the notary from becoming a walkable dossier. T
 
 ### §5.2 Merkle batching
 
-Some notary deployments batch attestation hashes into a Merkle tree and publish only the root as a cost optimization. SWORN v0.2 does not specify a normative Merkle format at the protocol layer.
+Some notary deployments batch attestation hashes into a Merkle tree and publish only the root as a cost optimization. This specification does not define a normative Merkle format at v0.2.
 
 **Requirements for batching implementations.** An implementation that batches MUST anchor the resulting Merkle root as a distinct notary record satisfying §5.1 and MUST provide off-chain inclusion proofs to verifiers on request. Inclusion proofs verified against a batched root MUST resolve to the individual attestation's `SHA-256(canonical_bytes)` per §5.1's independent-recomputation rule.
 
@@ -447,13 +447,13 @@ Implementations MAY publish payload storage locations in off-chain metadata; the
 
 ### §5.6 Forbidden substrate operations
 
-The SAS binding (bindings/sas.md §4) enumerates SAS instructions that a conforming implementation MUST NOT invoke on SWORN attestations. Chief among them: the `tokenize` and `close` instructions. Invoking either would express a transfer or deletion the specification's §5.4 durability rule forbids at the protocol layer.
+The SAS binding (bindings/sas.md §4) enumerates SAS instructions that a conforming implementation MUST NOT invoke on notarized attestations. Chief among them: the `tokenize` and `close` instructions. Invoking either would express a transfer or deletion the §5.4 durability rule forbids at the protocol layer.
 
 ---
 
 ## §6 Layer 5: Presentation
 
-Layer 5 defines how third parties interact with attestations after Layer 4 has anchored them. The central discipline is *shown, not pulled*: a conforming implementation MUST support verification of attestations a caller already knows about, and MUST NOT support enumeration, discovery, or bulk export of attestations by properties of their subjects or signers. This is what keeps the SWORN graph from becoming a surveillance database while preserving its utility as verifiable testimony.
+Layer 5 defines how third parties interact with attestations after Layer 4 has anchored them. The central discipline is *shown, not pulled*: a conforming implementation MUST support verification of attestations a caller already knows about, and MUST NOT support enumeration, discovery, or bulk export of attestations by properties of their subjects or signers. This is what keeps the attestation graph from becoming a surveillance database while preserving its utility as verifiable testimony.
 
 ### §6.1 Verification endpoint contract
 
@@ -486,9 +486,9 @@ A disclosure token authorizes exactly one retrieval of one attestation's payload
 **Required properties.**
 
 - **Single-use by default.** A conforming implementation MUST redeem each disclosure token at most once. A second redemption attempt MUST fail with a distinct error. Implementations MAY offer explicitly-designated multi-use tokens as a separate token type; where they do, the multi-use property MUST be visible in the token's metadata.
-- **Time-bounded.** Every token has an expiration. Implementations MUST reject expired tokens with a distinct error class from single-use exhaustion. SWORN v0.2 recommends a minimum floor of 60 seconds and a maximum ceiling of 7 days for single-use tokens.
+- **Time-bounded.** Every token has an expiration. Implementations MUST reject expired tokens with a distinct error class from single-use exhaustion. Recommended range: minimum floor of 60 seconds, maximum ceiling of 7 days for single-use tokens.
 - **Signer-authorized.** A disclosure token MUST be issued by proof of control of the attestation's signing key or by a mechanism the signer has explicitly authorized. Implementations MUST NOT permit unauthenticated parties to mint disclosure tokens for arbitrary attestations.
-- **Domain-separated.** The bytes signed to authorize token issuance MUST NOT be substitutable for the canonical byte sequence of any attestation (§3.1) or the canonical form of any other SWORN operation. Implementations MUST use a domain separator that cannot collide with attestation canonical bytes; the reference domain separator is the literal string `sworn-disclosure-token-v1`.
+- **Domain-separated.** The bytes signed to authorize token issuance MUST NOT be substitutable for the canonical byte sequence of any attestation (§3.1) or the canonical form of any other operation defined by this specification. Implementations MUST use a domain separator that cannot collide with attestation canonical bytes; the reference domain separator is the literal string `sworn-disclosure-token-v1`.
 
 ### §6.4 Refused operations
 
@@ -502,7 +502,7 @@ A conforming implementation MUST NOT expose operations that enumerate attestatio
 
 Implementations MUST return an explicit refusal (not treat these as absent features). The refusal is a first-class part of the presentation contract: an implementer testing conformance MUST observe the refusal to confirm the discipline is enforced.
 
-**Rationale.** The design commitment is that the attestation graph is verifiable without being enumerable. A verifier holding an attestation identifier can confirm its authenticity; a party who does not hold an identifier cannot bulk-discover the graph's contents. The discipline is enforced at Layer 5 because it is the layer where callers meet the system. A raw substrate scan that bypassed this layer (for example, an unrestricted `getProgramAccounts` scan) is not itself a conforming SWORN presentation. §5.1's PDA-seed discipline exists so that even a raw substrate scan does not become a walkable index.
+**Rationale.** The design commitment is that the attestation graph is verifiable without being enumerable. A verifier holding an attestation identifier can confirm its authenticity; a party who does not hold an identifier cannot bulk-discover the graph's contents. The discipline is enforced at Layer 5 because it is the layer where callers meet the system. A raw substrate scan that bypassed this layer (for example, an unrestricted `getProgramAccounts` scan) is not itself a conforming presentation. §5.1's PDA-seed discipline exists so that even a raw substrate scan does not become a walkable index.
 
 **Signer-scoped exceptions.** A signer authenticated to their own key MAY retrieve a list of their own attestations. This is self-service reflection, not enumeration by third parties. Implementations offering this MUST authenticate the request as coming from the signer's key.
 
@@ -523,15 +523,15 @@ Implementations MUST offer rate limiting on the verification and disclosure inte
 
 ## §7 Security considerations
 
-SWORN's security surface is deliberately narrow. The protocol establishes that a specific signer produced a specific statement over specific canonical bytes and that the statement was anchored in a public durable substrate at a specific time. Everything else is reader-side interpretation or out of scope.
+The security surface is deliberately narrow. The protocol establishes that a specific signer produced a specific statement over specific canonical bytes and that the statement was anchored in a public durable substrate at a specific time. Everything else is reader-side interpretation or out of scope.
 
 ### §7.1 Sybil resistance is bounded
 
-SWORN provides no protocol-level mechanism to prevent one real-world party from operating multiple signer keys. Any Ed25519 keypair produces conforming attestations; the graph does not distinguish "one person with five keys" from "five people with one key each."
+This specification provides no protocol-level mechanism to prevent one real-world party from operating multiple signer keys. Any Ed25519 keypair produces conforming attestations; the graph does not distinguish "one person with five keys" from "five people with one key each."
 
 The graph is public. A cluster of keys signing back-and-forth attestations to each other is legible as such at the graph-analysis layer: density of mutual attestation, absence of external corroboration, and timing correlation between keys are all properties a verifier can compute. The `witnessing_depth` and `attestor_relationship` fields commit the signer's own claim about the epistemic depth of the witnessing act, making low-depth self-report clusters explicit rather than hidden.
 
-SWORN does not provide real-world identity verification, biometric uniqueness, proof-of-personhood, or KYC. Implementations that need such properties layer them above SWORN as application concerns.
+This specification does not provide real-world identity verification, biometric uniqueness, proof-of-personhood, or KYC. Implementations that need such properties layer them above as application concerns.
 
 ### §7.2 Key compromise
 
@@ -541,9 +541,9 @@ Applications concerned with key compromise MUST layer their own detection above 
 
 ### §7.3 Colluding attestation rings
 
-Colluding signers can produce attestations that mutually corroborate false claims. SWORN does not detect such collusion at the protocol layer; the graph-analysis approach in §7.1 is a reader-side heuristic, not a spec-enforced property.
+Colluding signers can produce attestations that mutually corroborate false claims. This specification does not detect such collusion at the protocol layer; the graph-analysis approach in §7.1 is a reader-side heuristic, not a spec-enforced property.
 
-Applications MAY require attestations from signers with independent standing (measured by graph position, external-source provenance, or off-chain identity binding) as a policy layer above SWORN. Such policies are application-defined and SHOULD be documented alongside the standing-conversion transparency requirements of applications built on SWORN.
+Applications MAY require attestations from signers with independent standing (measured by graph position, external-source provenance, or off-chain identity binding) as a policy layer above the protocol. Such policies are application-defined and SHOULD be documented alongside the standing-conversion transparency requirements of the applications themselves.
 
 ### §7.4 Payload availability versus hash durability
 
@@ -559,7 +559,7 @@ The signer's `signer_asserted_at` is a claim, not a proof. A signer can produce 
 
 ## §8 Privacy considerations
 
-SWORN's privacy properties emerge from a specific split: the facts of attestation (who signed, when, what class of claim, anchored where) are the signer's own responsibility to control at attestation time; the content of the payload is not published on the notary substrate and reaches verifiers only through the disclosure discipline of Layer 5 (§6). This section names what the split provides, what it does not, and where implementers carry privacy load the protocol does not carry.
+Privacy properties emerge from a specific split: the facts of attestation (who signed, when, what class of claim, anchored where) are the signer's own responsibility to control at attestation time; the content of the payload is not published on the notary substrate and reaches verifiers only through the disclosure discipline of Layer 5 (§6). This section names what the split provides, what it does not, and where implementers carry privacy load the protocol does not carry.
 
 ### §8.1 Public verification, private payloads
 
@@ -581,21 +581,21 @@ Layer 5's two-call design (§6.2, §6.3) is the mechanism by which a verifier ga
 
 **Delegation.** Implementations MAY offer signer-delegated disclosure policies (a signer grants a third party the right to mint tokens for a defined subset of the signer's attestations) provided such delegation is itself an attestation. Silent delegation is prohibited.
 
-**Subject-as-signer.** When the signer is also the subject (`attestor_relationship = self`, §9.4), signer-authorized disclosure is equivalent to subject-authorized disclosure. Cases where signer and subject differ are addressed by activity-type schemas; SWORN v0.2 does not enforce subject-consent semantics separately from signer authorization.
+**Subject-as-signer.** When the signer is also the subject (`attestor_relationship = self`, §9.4), signer-authorized disclosure is equivalent to subject-authorized disclosure. Cases where signer and subject differ are addressed by activity-type schemas; this specification does not enforce subject-consent semantics separately from signer authorization.
 
 ### §8.3 Right to be forgotten and immutable hashes
 
-The tension between deletion rights (GDPR Article 17 and equivalents) and cryptographic immutability is real and not fully resolvable by protocol design. This section names how SWORN divides the surface so the resolvable parts can be resolved and the unresolvable parts are legible as such.
+The tension between deletion rights (GDPR Article 17 and equivalents) and cryptographic immutability is real and not fully resolvable by protocol design. This section names how the specification divides the surface so the resolvable parts can be resolved and the unresolvable parts are legible as such.
 
-**What SWORN makes tractable.** Because payloads are off-chain and subject to retention hints (§2.7, §5.5), the content carrying personal data can be discarded by the parties retaining it. A subject requesting erasure can be honored by removing the payload from every retention source under the implementation's control. The notary hash remains but reveals nothing about the payload beyond that some 32-byte value was committed.
+**What this specification makes tractable.** Because payloads are off-chain and subject to retention hints (§2.7, §5.5), the content carrying personal data can be discarded by the parties retaining it. A subject requesting erasure can be honored by removing the payload from every retention source under the implementation's control. The notary hash remains but reveals nothing about the payload beyond that some 32-byte value was committed.
 
 **What remains regardless.** The canonical bytes are re-derivable by anyone who ever held them. `signer`, `subject`, `activity_type`, `data_hash`, provenance fields, and timestamps are inside the signed bytes. If the `subject` field carries a real-world identifier directly, that identifier is embedded in any legitimately-held canonical bytes and is not erasable without invalidating the signature.
 
 **Notary-side.** The notary substrate publishes only `attestation_hash` and a timestamp under the §5.1 discipline. The substrate itself does not carry a walkable copy of the canonical bytes. But the substrate does confirm that an attestation with a particular `attestation_hash` was published at a particular time, and any party who obtains the canonical bytes elsewhere can prove they match the published hash.
 
-**Required disclosure to signers and subjects.** Implementations that accept personal data into SWORN attestations MUST clearly disclose, before signing, which fields will be part of the signed bytes (durable and re-derivable by any holder) and which will be retention-controllable (in the payload). Silent conflation is a privacy failure.
+**Required disclosure to signers and subjects.** Implementations that accept personal data into conforming attestations MUST clearly disclose, before signing, which fields will be part of the signed bytes (durable and re-derivable by any holder) and which will be retention-controllable (in the payload). Silent conflation is a privacy failure.
 
-**Metadata-as-personal-data.** In some legal readings, surviving metadata (fact of signing, activity type, timestamp) constitutes personal data. SWORN v0.2 provides no protocol mechanism to erase this surviving metadata. Implementations for which this is unacceptable MUST either use SWORN only for content whose metadata is not itself personal data, or NOT use SWORN for that content class.
+**Metadata-as-personal-data.** In some legal readings, surviving metadata (fact of signing, activity type, timestamp) constitutes personal data. This specification provides no protocol mechanism to erase this surviving metadata. Implementations for which this is unacceptable MUST either use conforming attestations only for content whose metadata is not itself personal data, or not use this specification for that content class.
 
 ### §8.4 Pseudonymity of signers
 
@@ -615,11 +615,11 @@ Signers who want unlinkability across attestations MUST use a distinct key per a
 
 ### §9.1 Activity type namespace registry
 
-This registry lists namespaces reserved for use with SWORN activity type URIs. Registration is descriptive: an implementation is free to use any well-formed URI as an activity type (§2.2), and this section documents namespaces already in use so implementers can align without collision.
+This registry lists namespaces reserved for use with activity type URIs. Registration is descriptive: an implementation is free to use any well-formed URI as an activity type (§2.2), and this section documents namespaces already in use so implementers can align without collision.
 
 | Namespace prefix | Owner / source | Purpose |
 |---|---|---|
-| `https://sworn.dev/v1/` | The SWORN specification | Well-known types defined by this specification (see §4.3 revocation type). |
+| `https://sworn.dev/v1/` | This specification's own namespace | Well-known types defined here (see §4.3 revocation type). |
 | `https://credit.niso.org/contributor-roles/` | NISO (Z39.104-2022) | CRediT (Contributor Roles Taxonomy). See §9.1.1. |
 
 Non-reserved namespaces (any well-formed URI a signer chooses to use) remain valid activity types.
@@ -634,7 +634,7 @@ Additions to the `sworn.dev/v1/` namespace are additive and do not advance `spec
 
 #### §9.1.1 CRediT (Contributor Roles Taxonomy)
 
-CRediT is a fourteen-role vocabulary maintained by NISO as ANSI/NISO Z39.104-2022. SWORN registers the CRediT namespace so attestations recognizing research contributions can share a widely-adopted vocabulary.
+CRediT is a fourteen-role vocabulary maintained by NISO as ANSI/NISO Z39.104-2022. This specification registers the CRediT namespace so attestations recognizing research contributions can share a widely-adopted vocabulary.
 
 **URI pattern.** Each CRediT role maps to a URI of the form `https://credit.niso.org/contributor-roles/<slug>/`, where `<slug>` is a lowercase kebab-case rendering of the role name. The URIs include the `https://` scheme and the trailing slash as published by NISO.
 
@@ -678,12 +678,12 @@ For each value, this registry specifies the canonical string label, what the sou
 | 6 | `rss_parsed` | Machine-extracted from an RSS/Atom feed. | SHOULD: `SHA-256` of the item's `<guid>` or `<atom:id>` value as UTF-8. Where the feed provides neither, `SHA-256` of the item's canonical URL after NFC normalization. |
 | 7 | `open_source_project` | Sourced from a project's declared authorship (CITATION.cff, package metadata, etc.). | SHOULD: `SHA-256` of the primary repository URL (lowercase scheme+host+path). |
 | 8 | `coordinator_confirmed` | A coordinator role in the community affirmed the claim. | SHOULD: `SHA-256(coordinator_signer_pubkey || confirmation_timestamp_int64_le)`. Deterministic within an implementation. |
-| 9 | `peer_witnessed` | A peer directly witnessed the claimed activity. | MUST: `SHA-256` of the peer's 32-byte SWORN signer pubkey. |
+| 9 | `peer_witnessed` | A peer directly witnessed the claimed activity. | MUST: `SHA-256` of the peer's 32-byte signer pubkey. |
 | 10 | `computed` | The claim was derived algorithmically from other data. | SHOULD: `SHA-256(algorithm_identifier_utf8 || canonicalized_inputs_bytes)`. |
 | 11 | `system_observed` | The claim is a system-observed fact (attendance record, transaction confirmation, computed platform stat). | SHOULD: `SHA-256(platform_identifier_utf8 || event_id_utf8)`. |
 | 12 | `regulatory_filing` | Sourced from a legally-mandated public disclosure. | MUST: `SHA-256(filing_type_identifier_utf8 || filing_identifier_utf8)` (e.g., `990:EIN:12345:2024` for an IRS 990). |
 | 13 | `community_curated_db` | Sourced from a community-edited database with revision history. | MUST: `SHA-256` of the canonical entity URL after NFC normalization (e.g., `https://musicbrainz.org/artist/<mbid>`). |
-| 14 | `external_sworn_attestation` | References another SWORN attestation (federation, cross-implementation graph). | MUST: `SHA-256` of the referenced attestation's canonical byte sequence, per §3.1 of the version that attestation was signed under. |
+| 14 | `external_sworn_attestation` | References another conforming attestation (federation, cross-implementation graph). | MUST: `SHA-256` of the referenced attestation's canonical byte sequence, per §3.1 of the version that attestation was signed under. |
 | 15 | `oauth_authenticated` | The signer's identity was verified by a third-party OAuth provider at attestation time. See §9.2.1. | MUST: `SHA-256("oauth:" \|\| provider_name_utf8 \|\| ":" \|\| provider_user_id_utf8)`. |
 
 **Enum evolution.** Verifiers encountering a `source_type` value they do not recognize MUST report a version-mismatch condition distinct from malformed-attestation. Verifiers MUST NOT interpret unknown source_type values as `unknown` (0); the enum is exhaustive at each version.
@@ -740,7 +740,7 @@ In v0.2 the sole registered notarization substrate is Solana Attestation Service
 
 ## §10 Conformance
 
-Conformance to SWORN v0.2 is defined by what an implementation can produce, consume, and refuse.
+Conformance to this specification is defined by what an implementation can produce, consume, and refuse.
 
 ### §10.1 Conformance levels
 
@@ -804,7 +804,7 @@ Vectors cover the meaningful edge cases: sourceless attestations (source_type �
 
 ## Appendix A: Publication history
 
-**v0.2 (this document).** Substantial revision from v0.1-final following external review. The canonical byte sequence advances `spec_version` from 2 to 3. The rename `created_at` → `signer_asserted_at` reflects the field's semantics as the signer's claim rather than an authoritative timestamp. The Layer 4 notary requirements now include the non-walkability discipline of §5.1 and require the SAS binding of bindings/sas.md for full conformance. The `sworn.dev/v1/revocation` activity type is now registered rather than reserved. §1.5 (previous non-transferability firewall) is retired; §1.4 lists non-goals. All references to specific applications built on SWORN move to PRIMER.md.
+**v0.2 (this document).** Substantial revision from v0.1-final following external review. The canonical byte sequence advances `spec_version` from 2 to 3. The rename `created_at` to `signer_asserted_at` reflects the field's semantics as the signer's claim rather than an authoritative timestamp. The Layer 4 notary requirements now include the non-walkability discipline of §5.1 and require the SAS binding of bindings/sas.md for full conformance. The `sworn.dev/v1/revocation` activity type is now registered rather than reserved. §1.5 (previous non-transferability firewall) is retired; §1.4 lists non-goals. All references to specific applications built on the specification move to PRIMER.md. The SWORN name is retired from prose; see PRIMER for historical context.
 
 **v0.1-final.** Added five provenance fields (`source_hash`, `source_type`, `confidence`, `witnessing_depth`, `attestor_relationship`) to the canonical byte sequence and prefixed the sequence with an explicit `spec_version` marker. Canonical byte length grew from 208 bytes to 248 bytes. Under review; not published for external signing.
 
@@ -822,7 +822,7 @@ Vectors cover the meaningful edge cases: sourceless attestations (source_type �
 
 **Canonicalization.** Deterministic serialization per RFC 8785 for JSON payloads (§2.3) or per §9.2 for source identifiers.
 
-**Ed25519.** The signature algorithm specified in RFC 8032, used in PureEdDSA form throughout SWORN.
+**Ed25519.** The signature algorithm specified in RFC 8032, used in PureEdDSA form throughout this specification.
 
 **Notarization substrate.** The public tamper-evident ledger where attestation hashes are committed. Solana Attestation Service in v0.2.
 
@@ -843,4 +843,4 @@ The following bindings live in the specification repository. Bindings other than
 - **bindings/sas.md** (Solana Attestation Service). Normative. Defines credential and schema layout, PDA seed derivation, forbidden instructions, and account data layout. Required for Level 3 (Notarizer) conformance.
 - **bindings/postgres.md** (Postgres via [extol-work/sworn-postgres](https://github.com/extol-work/sworn-postgres)). Informative. Documents a Layer 1 + Layer 2 partial-conformance implementation that produces signed attestations without publishing them to a substrate.
 
-An implementation MAY use another substrate for Layers 1 and 2 storage while still producing SWORN-conforming attestations; such an implementation is not a Level 3 Notarizer under v0.2.
+An implementation MAY use another substrate for Layers 1 and 2 storage while still producing conforming attestations; such an implementation is not a Level 3 Notarizer under v0.2.

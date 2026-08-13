@@ -1,4 +1,4 @@
-# SWORN Binding: Solana Attestation Service (SAS)
+# Binding: Solana Attestation Service (SAS)
 
 **Status:** Normative. This document defines the concrete requirements a Layer 4 (Notarizer) conforming implementation MUST satisfy when using Solana Attestation Service as the notary substrate. Requirements in SPEC.md §5 govern what any notary MUST publish and MUST NOT permit; this document specifies how to satisfy them on SAS specifically.
 
@@ -10,28 +10,28 @@
 
 ## §1 Why Solana Attestation Service
 
-The engineering rationale for binding SWORN's Layer 4 to Solana specifically is documented in PRIMER.md. In brief:
+The engineering rationale for binding the specification's Layer 4 to Solana specifically is documented in PRIMER.md. In brief:
 
 - SAS is a first-class Solana program providing credential, schema, and attestation-account primitives without requiring per-adopter contract deployment.
-- Solana signs with Ed25519 natively, matching SWORN's Layer 2 requirement without algorithm bridging.
+- Solana signs with Ed25519 natively, matching the specification's Layer 2 requirement without algorithm bridging.
 - Solana's Program Derived Address model allows caller-chosen opaque seeds, which is what makes SPEC.md §5.1's non-walkability discipline achievable.
-- Per-attestation cost (approximately $0.0006) and sub-5-second finality match the interaction pattern SWORN attestations are used in.
+- Per-attestation cost (approximately $0.0006) and sub-5-second finality match the interaction pattern conforming attestations are used in.
 
-A future substrate satisfying the same properties could be added as an additional binding through a subsequent version of SPEC.md. None currently qualify. Adopters who wish to deploy SWORN on another substrate should read this document as the reference for what the corresponding substrate binding needs to establish.
+A future substrate satisfying the same properties could be added as an additional binding through a subsequent version of SPEC.md. None currently qualify. Adopters who wish to deploy this specification on another substrate should read this document as the reference for what the corresponding substrate binding needs to establish.
 
 ## §2 Credential setup
 
-**Requirement.** Each SWORN deployment MUST operate under exactly one SAS credential per environment (mainnet-beta, devnet, testnet). The credential authority is the party responsible for ensuring published attestations conform to SPEC.md §5.
+**Requirement.** Each conforming deployment MUST operate under exactly one SAS credential per environment (mainnet-beta, devnet, testnet). The credential authority is the party responsible for ensuring published attestations conform to SPEC.md §5.
 
-The credential is created once per environment via SAS's `CreateCredential` instruction. The credential authority's public key is the fee payer for all SWORN notary transactions in that environment.
+The credential is created once per environment via SAS's `CreateCredential` instruction. The credential authority's public key is the fee payer for all notary transactions in that environment.
 
-**Authorized signers list.** The credential's authorized-signers list MUST contain only the deployment's notary signer public keys. Adding an authorized signer is a governance action; the deployment operator MUST document its process for adding, rotating, and removing authorized signers. SWORN itself does not specify this process; deployments MAY use single-signer, multisig, KMS-managed, or hardware-security-module patterns as their threat model requires.
+**Authorized signers list.** The credential's authorized-signers list MUST contain only the deployment's notary signer public keys. Adding an authorized signer is a governance action; the deployment operator MUST document its process for adding, rotating, and removing authorized signers. The specification itself does not specify this process; deployments MAY use single-signer, multisig, KMS-managed, or hardware-security-module patterns as their threat model requires.
 
-**Credential name.** SWORN deployments SHOULD use a credential name that clearly identifies the deployment (e.g., `extol-mainnet-v1`, `example-org-prod`) rather than a generic name.
+**Credential name.** conforming deployments SHOULD use a credential name that clearly identifies the deployment (e.g., `extol-mainnet-v1`, `example-org-prod`) rather than a generic name.
 
 ## §3 Schema setup
 
-**Requirement.** Each SWORN deployment MUST use exactly one SAS schema per environment. Multiple schemas within one deployment is not permitted in v0.2; a future version may specify a schema versioning discipline.
+**Requirement.** Each conforming deployment MUST use exactly one SAS schema per environment. Multiple schemas within one deployment is not permitted in v0.2; a future version may specify a schema versioning discipline.
 
 The schema is created once per environment via SAS's `CreateSchema` instruction, under the credential from §2.
 
@@ -53,11 +53,11 @@ Total: 42 bytes.
 
 ### §3.2 Schema description field
 
-The schema's description field (if the SAS deployment supports one) SHOULD contain the string `SWORN v0.2 notary anchor: spec_version || attestation_hash || signer_asserted_at`. This is informative metadata; it does not affect verification.
+The schema's description field (if the SAS deployment supports one) SHOULD contain the string `v0.2 notary anchor: spec_version || attestation_hash || signer_asserted_at`. This is informative metadata; it does not affect verification.
 
 ## §4 PDA seed derivation
 
-**Requirement.** The SAS attestation account PDA for a SWORN attestation MUST be derived as:
+**Requirement.** The SAS attestation account PDA for a conforming attestation MUST be derived as:
 
 ```
 PDA seeds = [
@@ -74,7 +74,7 @@ Using `SHA-256(canonical_bytes)` as the nonce means:
 
 - The PDA is deterministic: any party holding the canonical bytes can compute the PDA without any state lookup.
 - The PDA is opaque with respect to signer, subject, or any other field: a scan of the SAS program's accounts yields a set of hashes with no signal about their contents.
-- The PDA is idempotent: attempting to publish the same attestation twice produces the same PDA, so SAS's account-already-exists check prevents duplicates without any additional state on the SWORN side.
+- The PDA is idempotent: attempting to publish the same attestation twice produces the same PDA, so SAS's account-already-exists check prevents duplicates without any additional state on the the specification side.
 
 **Non-conforming derivations.** The following seed patterns violate SPEC.md §5.1 non-walkability and MUST NOT be used:
 
@@ -87,7 +87,7 @@ Using `SHA-256(canonical_bytes)` as the nonce means:
 
 ## §5 Attestation creation
 
-**Requirement.** SWORN attestations are notarized via the SAS `CreateAttestation` instruction, invoked by a notary signer authorized under the credential from §2.
+**Requirement.** conforming attestations are notarized via the SAS `CreateAttestation` instruction, invoked by a notary signer authorized under the credential from §2.
 
 The instruction MUST be invoked with:
 
@@ -96,28 +96,28 @@ The instruction MUST be invoked with:
 - Attestation data of exactly 42 bytes matching the schema layout in §3.1.
 - The notary signer as the transaction fee payer.
 
-The SWORN attestation's `signer` is NOT the SAS credential authority. SWORN and SAS have different signing models; the SWORN signature (Ed25519 over 248 canonical bytes per SPEC.md §3) is produced by the attestation's signer and lives off-chain, while the SAS transaction signature is produced by the notary signer authorized under the credential.
+The conforming attestation's `signer` is NOT the SAS credential authority. The signing layer and SAS have different signing models; the attestation signature (Ed25519 over 248 canonical bytes per SPEC.md §3) is produced by the attestation's signer and lives off-chain, while the SAS transaction signature is produced by the notary signer authorized under the credential.
 
 **Sign locally, notarize via a service.** Because the notary signer is not the attestation signer, the common deployment pattern is:
 
 1. The attestation signer produces the canonical bytes and Ed25519 signature off-chain (typically in a client or KMS-mediated flow).
 2. The signed attestation is transmitted to a notary service operated by the credential authority.
-3. The notary service computes `SHA-256(canonical_bytes)`, verifies the SWORN signature to ensure the attestation is well-formed, and invokes `CreateAttestation` with the notary signer as fee payer.
+3. The notary service computes `SHA-256(canonical_bytes)`, verifies the attestation signature to ensure the attestation is well-formed, and invokes `CreateAttestation` with the notary signer as fee payer.
 4. The notary hash is now anchored.
 
 This pattern lets clients hold their own signing keys without also holding SOL for transaction fees.
 
 ## §6 Forbidden SAS instructions
 
-A conforming SWORN deployment MUST NOT invoke the following SAS instructions on SWORN attestations:
+A conforming conforming deployment MUST NOT invoke the following SAS instructions on conforming attestations:
 
-- **`CreateTokenizedAttestation`** and any tokenization variant. SWORN attestations are not fungible or non-fungible tokens; presenting them as tokens contradicts the fact-signing model of the specification and violates SPEC.md §5.4 (durability) if the tokenized form permits transfer that changes ownership independent of the underlying attestation's signer.
-- **`CloseAttestation`.** Once anchored, a SWORN attestation MUST remain published for as long as the SAS substrate maintains any record per SPEC.md §5.3 and §5.4. Invoking `CloseAttestation` would break the durability property.
+- **`CreateTokenizedAttestation`** and any tokenization variant. conforming attestations are not fungible or non-fungible tokens; presenting them as tokens contradicts the fact-signing model of the specification and violates SPEC.md §5.4 (durability) if the tokenized form permits transfer that changes ownership independent of the underlying attestation's signer.
+- **`CloseAttestation`.** Once anchored, a conforming attestation MUST remain published for as long as the SAS substrate maintains any record per SPEC.md §5.3 and §5.4. Invoking `CloseAttestation` would break the durability property.
 - **`ChangeSchema`** or any instruction that mutates a previously-anchored attestation's data. SPEC.md §5.4 forbids notary hash mutation.
 
 Deployments MAY use SAS's other administrative instructions (`ChangeAuthorizedSigners` for authorized-signer rotation, credential and schema management) as needed, provided they do not violate SPEC.md's durability or non-enumerability rules.
 
-**Implementer note.** SAS accepts these instructions and does not distinguish SWORN attestations from other SAS uses at the program layer. Enforcement is deployment discipline: the notary service code path MUST NOT construct or submit these instructions against SWORN attestation accounts.
+**Implementer note.** SAS accepts these instructions and does not distinguish conforming attestations from other SAS uses at the program layer. Enforcement is deployment discipline: the notary service code path MUST NOT construct or submit these instructions against conforming attestation accounts.
 
 ## §7 Merkle batching
 
@@ -146,13 +146,13 @@ Same 42-byte total. Merkle root anchors are distinguishable from individual atte
 3. Reads the anchored Merkle root PDA from SAS and confirms the recomputed root matches the on-chain 32 bytes at offset 2.
 4. Reads the SAS transaction's block time as the notarization timestamp for the entire batch.
 
-**Merkle tree construction.** For v0.2, SWORN does not normatively specify the Merkle construction algorithm (binary vs unbalanced, hash prefixing for depth safety, node encoding). Implementations MUST document their construction such that a third-party verifier receiving an inclusion proof can recompute the root without out-of-band information. Extol's production Merkle construction is documented in [extol-work/extol-cortex](https://github.com/extol-work/extol-cortex) at `src/shared/merkle.ts`.
+**Merkle tree construction.** For v0.2, this specification does not normatively define the Merkle construction algorithm (binary vs unbalanced, hash prefixing for depth safety, node encoding). Implementations MUST document their construction such that a third-party verifier receiving an inclusion proof can recompute the root without out-of-band information. Extol's production Merkle construction is documented in [extol-work/extol-cortex](https://github.com/extol-work/extol-cortex) at `src/shared/merkle.ts`.
 
 A normative Merkle construction is targeted for v0.3.
 
 ## §8 Read and verification procedure
 
-A verifier who possesses a SWORN attestation (canonical bytes plus signature) and wants to confirm it is anchored on SAS:
+A verifier who possesses a conforming attestation (canonical bytes plus signature) and wants to confirm it is anchored on SAS:
 
 1. Compute `attestation_hash = SHA-256(canonical_bytes)` per SPEC.md §3.1.
 2. Compute the SAS attestation PDA per §4 of this document using the deployment's credential and schema pubkeys plus `attestation_hash` as the nonce.

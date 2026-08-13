@@ -1,4 +1,4 @@
-# SWORN Binding: Postgres (sworn-postgres)
+# Binding: Postgres (sworn-postgres)
 
 **Status:** Informative. This document describes how the reference Postgres implementation at [extol-work/sworn-postgres](https://github.com/extol-work/sworn-postgres) satisfies Layers 1 (Testimony) and 2 (Signing) of SPEC.md v0.2. This binding does NOT provide Layer 4 (Notarization) conformance; see §4 below.
 
@@ -8,7 +8,7 @@
 
 ## §1 What sworn-postgres is
 
-`sworn-postgres` is a Postgres schema plus a small Rust binary that together produce and store SWORN attestations conforming to SPEC.md Layers 1 (Testimony) and 2 (Signing).
+`sworn-postgres` is a Postgres schema plus a small Rust binary that together produce and store conforming attestations conforming to SPEC.md Layers 1 (Testimony) and 2 (Signing).
 
 Specifically it:
 
@@ -48,7 +48,7 @@ sworn-postgres is NOT the right choice for:
 
 - **Third-party-verifiable attestations.** If any party outside your organization needs to trust the attestation exists at a specific time, you need Layer 4. Use bindings/sas.md.
 - **Attestations you plan to display as verifiable public evidence.** The same reason.
-- **Standing accumulation across implementations.** The interoperability property that makes SWORN's graph portable requires Layer 4 conformance.
+- **Standing accumulation across implementations.** The interoperability property that makes the attestation graph portable requires Layer 4 conformance.
 
 ## §4 Why this is not a Layer 4 binding
 
@@ -73,13 +73,13 @@ The Postgres schema is at [extol-work/sworn-postgres](https://github.com/extol-w
 
 The signing binary is at `src/main.rs`. The verification binary is at `src/verify.rs`. Reference vectors are at `fixtures/vectors/`.
 
-Cross-implementation validation runs sworn-postgres's vector emitter against the vectors expected by Titania's TypeScript runner and the standalone Rust runner in the main SWORN repository's `fixtures/runners/`. All three implementations agree byte-for-byte.
+Cross-implementation validation runs sworn-postgres's vector emitter against the vectors expected by Titania's TypeScript runner and the standalone Rust runner in the main specification repository's `fixtures/runners/`. All three implementations agree byte-for-byte.
 
 ## §6 Relationship to Extol's production deployment
 
 Extol's production deployment does not use sworn-postgres as its signing surface. Extol's signing happens in the passkey-derived client flow described in the [extol-work/extol-cortex](https://github.com/extol-work/extol-cortex) documentation, with SAS as the notary via bindings/sas.md.
 
-sworn-postgres exists as a reference implementation and interoperability anchor, not as a production dependency. Its role is to prove that SWORN's byte layout and signature semantics are reproducible outside Extol's application stack. If sworn-postgres and Extol's client-side implementation ever produced different canonical bytes for the same input, the specification would have failed at Layer 1 or 2.
+sworn-postgres exists as a reference implementation and interoperability anchor, not as a production dependency. Its role is to prove that the specification's byte layout and signature semantics are reproducible outside Extol's application stack. If sworn-postgres and Extol's client-side implementation ever produced different canonical bytes for the same input, the specification would have failed at Layer 1 or 2.
 
 This is what makes the specification portable rather than a codebase-with-README-labeled-spec: multiple independent implementations agree on the bytes.
 
