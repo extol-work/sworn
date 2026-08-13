@@ -26,10 +26,6 @@ The third property is the one that makes the specification worth publishing rath
 
 The specification does not define:
 
-- **A witnessing operation.** When one party signs a statement about another party, the other party does not sign anything as a consequence. The `witness_for` field in an attestation is a pointer, not an operation. Applications that need a real two-party witness pattern build it as a pair of attestations, not as a spec primitive.
-
-- **Non-transferability.** A signed statement is a copyable object. If a signing key is sold, the buyer signs valid attestations under the seller's public key indistinguishable from the seller's own. The specification cannot prevent this at the protocol layer and does not try. Applications that want the appearance of non-transferability build it as product policy above the spec, not as a spec property.
-
 - **A trust model, a reputation score, or a ranking.** The graph of signed attestations is a public artifact. What weight to give any given attestation, how to combine them into a score, and whether to trust the resulting number are choices the reader makes. Two readers looking at the same graph can compute different scores and both be conforming.
 
 - **Identity verification.** A signer is a public key. The mapping between a public key and a person, an organization, or a role is entirely outside the specification. Applications that want signer identity build it as a separate directory, subject to their own privacy and legal constraints.

@@ -15,7 +15,7 @@ The specification is short (five layers) and deliberately narrow. See [SPEC.md](
 
 ## What this specification does not define
 
-Witnessing as a protocol operation, non-transferability of attestations, ranking or scoring functions, role and delegation patterns, KYC or identity assurance. These belong to applications built on top. See [PRIMER.md](./PRIMER.md) for the reasoning.
+Ranking or scoring functions, role and delegation patterns, KYC or identity assurance. These belong to applications built on top. See [PRIMER.md](./PRIMER.md) for the reasoning.
 
 ## Layout
 

@@ -56,10 +56,6 @@ A partial-conformance implementation MAY implement Layers 1 and 2 only, without 
 
 This specification does not define any of the following. Any product built on this specification that offers these properties does so above the specification, in its own documentation and under its own terms.
 
-- **Witnessing as a protocol operation.** The specification produces signed statements by one party. A `witness_for` field exists in the record (§2.6) as an optional pointer to another party, but the protocol does not run a two-party ceremony and does not enforce anything about the referenced party's participation. Applications that want multi-party witnessing build it above this specification as composition of independent attestations.
-
-- **Non-transferability.** A signed byte sequence is copyable and portable by its nature. This specification does not define an owner field, a transfer instruction, or any mechanism that would make one attestation belong to one key more than another. The Solana binding forbids the tokenize and close instructions on the underlying SAS attestations (bindings/sas.md §4), which prevents the substrate itself from expressing transfers or deletions; it does not prevent an application from constructing derived assets that reference these attestations. Non-transferability at the product layer is application policy, not specification property.
-
 - **A scoring, ranking, or aggregate quality function.** The graph of attestations is a public record. Interpretations of it (how to weigh peer-witnessed against computed-match provenance, how to decay older attestations, how to compose several corroborations) belong to readers. Two implementations reading the same graph may compute different derived signals for legitimate reasons.
 
 - **Real-world identity verification, proof-of-personhood, KYC.** The signer is a public key. Any binding of that key to a real-world identity is application-defined.
