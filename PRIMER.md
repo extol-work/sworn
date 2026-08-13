@@ -148,6 +148,14 @@ If you are reviewing the specification for a standards body or for your organiza
 
 **What is the risk of specification change?** Byte layout: near-zero, changes require a spec_version bump. Registry additions (new source_type, new activity types): common and expected. Prose clarifications: expected. Substantive semantic changes: rare and gated by review.
 
+## Note on the deferred signature-collection surface
+
+Earlier drafts described a signature-collection surface where reviewers could sign an attestation whose subject was a specific commit hash of the specification, as a "prove the spec by using the spec" review mechanism. That surface is deferred in v0.2.
+
+Two reasons. First, the surface is chicken-and-egg at launch: a signer would be signing against text they cannot yet cryptographically conform to, because the reference implementation stack has not yet aligned with v0.2. Aspirational calls-to-action leak "we did not finish this" and are worse than absent ones. Second, the audience the mechanism was designed for (adopters willing to publicly commit to accepting attestations under this specification) is better served by an adoption-ledger artifact hosted separately from the specification repository, where the semantic weight of a signature is "we will act on these attestations" rather than "we endorse the current draft text." Endorsement of text is what GitHub PRs and issues are for.
+
+The mechanism is deferred, not cancelled. If a body of adopters emerges who want a durable signed record of their commitment to the specification, a future revision may reintroduce a signature-collection surface with that shape. Nothing in v0.2 forecloses it.
+
 ## Historical note on the SWORN name
 
 Prior versions of this material were published under the name SWORN, which expanded to Signed, Witnessed, Owned, Recorded, Notarized. The v0.2 rewrite retired the name and the letter-per-property expansion because the protocol only specifies Signed and Notarized. Witnessing is not a protocol operation. Ownership and non-transferability are not enforceable at Layer 1. Recording is a subset of notarization. Retaining an acronym that promised properties the bytes could not deliver was inviting readers to look for a shape the specification did not have.
@@ -156,7 +164,7 @@ The GitHub repository retains the `sworn` short name for URL stability; the spec
 
 ## Version history
 
-**v0.2 (2026-08-12).** Rewrite. Notarization becomes SAS-normative. Non-enumerability becomes the central discipline at Layer 5. Non-transferability firewall (former §1.5) deleted as non-goal. Witnessing removed as a protocol operation. `created_at` renamed to `signer_asserted_at` and substrate time made authoritative. Nonce derivation fixed so same-subject, different-payload attestations do not collide. Revocation subject convention unified on SHA-256 of target canonical bytes. `sworn.dev/v1/revocation` registered. CRediT URIs corrected to include scheme and trailing slash per NISO. Extol/Cortex references swept from normative text. Structural split: SPEC.md purely normative, PRIMER.md non-normative rationale, bindings/sas.md and bindings/postgres.md as concrete substrate bindings. spec_version advances 2 to 3. The SWORN name retired from prose.
+**v0.2 (2026-08-12).** Rewrite. Notarization becomes SAS-normative. Non-enumerability becomes the central discipline at Layer 5. Non-transferability firewall (former §1.5) deleted as non-goal. Witnessing removed as a protocol operation. `created_at` renamed to `signer_asserted_at` and substrate time made authoritative. Nonce derivation fixed so same-subject, different-payload attestations do not collide. Revocation subject convention unified on SHA-256 of target canonical bytes. `sworn.dev/v1/revocation` registered. CRediT URIs corrected to include scheme and trailing slash per NISO. Extol/Cortex references swept from normative text. Structural split: SPEC.md purely normative, PRIMER.md non-normative rationale, bindings/sas.md and bindings/postgres.md as concrete substrate bindings. spec_version advances 2 to 3. The SWORN name retired from prose. RFC.md and the signature-collection surface deferred.
 
 **v0.1-final.** Added five provenance fields to the canonical byte sequence: source_hash, source_type, confidence, witnessing_depth, attestor_relationship. Prefixed byte sequence with an explicit spec_version marker. Byte length grew from 208 to 248 bytes. spec_version 1 to 2.
 

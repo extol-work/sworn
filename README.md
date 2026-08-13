@@ -47,7 +47,7 @@ Several existing specifications address signed factual claims: Verifiable Creden
 
 ## Status
 
-Draft v0.2. Not accepting external signatures against this text yet. The signing surface for the review is described in [RFC.md](./RFC.md) and will be live at `dev.extol.work` once the reference implementation stack is aligned with v0.2.
+Draft v0.2. Review happens via GitHub PRs and issues per [CONTRIBUTING.md](./CONTRIBUTING.md). A signature-collection surface for the review was considered and paused; a future revision may reintroduce it once independent implementations exist to sign against.
 
 Prior version (v0.1-final) exists in git history at commit `608f25d` and earlier. Signatures over v0.1-final canonical bytes do not verify as v0.2; the byte layout changed at position 178 (`created_at` renamed to `signer_asserted_at`) and `spec_version` advanced from 2 to 3.
 
