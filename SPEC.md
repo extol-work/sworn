@@ -62,6 +62,8 @@ This specification does not define any of the following. Any product built on th
 
 - **Roles, affiliation, delegation, multi-signature.** Reserved for future versions (§4.5).
 
+- **Downstream governance constraints on standing.** Non-transferability, standing-conversion transparency, and prohibitions on wrapping attestations in tokens are legitimate concerns for adopters building governance or economic systems. The specification does not attempt to enforce them at the byte layer: doing so would either add machinery most adopters do not need or make claims the spec cannot honor (a downstream implementer can wrap an attestation in a token regardless of what the spec says). Adopters document their own commitments.
+
 ### §1.5 Notational conventions
 
 Byte-level fields are little-endian unless explicitly noted. All hashes are SHA-256 (FIPS 180-4) unless otherwise specified. All signatures are Ed25519 (RFC 8032, PureEdDSA per §3.2) unless a registered alternative algorithm is used (§3.3).
@@ -800,7 +802,7 @@ Vectors cover the meaningful edge cases: sourceless attestations (source_type �
 
 ## Appendix A: Publication history
 
-**v0.2 (this document).** Substantial revision from v0.1-final following external review. The canonical byte sequence advances `spec_version` from 2 to 3. The rename `created_at` to `signer_asserted_at` reflects the field's semantics as the signer's claim rather than an authoritative timestamp. The Layer 4 notary requirements now include the non-walkability discipline of §5.1 and require the SAS binding of bindings/sas.md for full conformance. The `sworn.dev/v1/revocation` activity type is now registered rather than reserved. §1.5 (previous non-transferability firewall) is retired; §1.4 lists non-goals. All references to specific applications built on the specification move to PRIMER.md. The SWORN name is retired from prose; see PRIMER for historical context.
+**v0.2 (this document).** Substantial revision from v0.1-final following external review. The canonical byte sequence advances `spec_version` from 2 to 3. The rename `created_at` to `signer_asserted_at` reflects the field's semantics as the signer's claim rather than an authoritative timestamp. The Layer 4 notary requirements now include the non-walkability discipline of §5.1 and require the SAS binding of bindings/sas.md for full conformance. The `sworn.dev/v1/revocation` activity type is now registered rather than reserved. The previous §1.5 non-transferability firewall is retired; downstream governance constraints on standing are now scoped as adopter concerns rather than protocol properties (§1.4). All references to specific applications built on the specification move to PRIMER.md. The SWORN name is retired from prose; see PRIMER for historical context.
 
 **v0.1-final.** Added five provenance fields (`source_hash`, `source_type`, `confidence`, `witnessing_depth`, `attestor_relationship`) to the canonical byte sequence and prefixed the sequence with an explicit `spec_version` marker. Canonical byte length grew from 208 bytes to 248 bytes. Under review; not published for external signing.
 
