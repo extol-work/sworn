@@ -15,7 +15,7 @@ The engineering rationale for binding the specification's Layer 4 to Solana spec
 - SAS is a first-class Solana program providing credential, schema, and attestation-account primitives without requiring per-adopter contract deployment.
 - Solana signs with Ed25519 natively, matching the specification's Layer 2 requirement without algorithm bridging.
 - Solana's Program Derived Address model allows caller-chosen opaque seeds, which is what makes SPEC.md §5.1's non-walkability discipline achievable.
-- Per-attestation cost (approximately $0.0006) and sub-5-second finality match the interaction pattern conforming attestations are used in.
+- Per-transaction fees (approximately $0.0006) and sub-5-second finality match the interaction pattern conforming attestations are used in. Per-attestation account-rent cost is separate and is discussed in §11.
 
 A future substrate satisfying the same properties could be added as an additional binding through a subsequent version of SPEC.md. None currently qualify. Adopters who wish to deploy this specification on another substrate should read this document as the reference for what the corresponding substrate binding needs to establish.
 
@@ -37,19 +37,46 @@ The schema is created once per environment via SAS's `CreateSchema` instruction,
 
 ### §3.1 Schema data layout
 
-The schema's data section MUST hold exactly the following 42 bytes in the exact order shown:
+The schema's data section carries three fields whose semantic payload is 42 bytes and whose on-wire encoding is 46 bytes:
 
-| Field | Offset | Length | Encoding |
+| Field | Semantic offset | Semantic length | Encoding |
 |---|---|---|---|
 | `spec_version` | 0 | 2 bytes | u16 little-endian, always equals SPEC.md §3.1.1's registered spec_version value at attestation time (currently 3 for v0.2). |
 | `attestation_hash` | 2 | 32 bytes | `SHA-256(canonical_bytes)` per SPEC.md §3.1. |
 | `signer_asserted_at` | 34 | 8 bytes | int64 little-endian Unix seconds, copied verbatim from the attestation's `signer_asserted_at` field. |
 
-Total: 42 bytes.
+Semantic total: 42 bytes. On-wire total: 46 bytes (see below).
+
+**Schema layout type codes.** The SAS `CreateSchema` instruction
+requires a `layout: Vec<u8>` argument specifying the SchemaDataTypes
+enum value for each field. For the conforming layout:
+
+| Field | SchemaDataTypes value | Byte |
+|---|---|---|
+| `spec_version` | U16 | 1 |
+| `attestation_hash` | VecU8 | 13 |
+| `signer_asserted_at` | I64 | 8 |
+
+Layout: `[1, 13, 8]`. Field names in order:
+`["spec_version", "attestation_hash", "signer_asserted_at"]`.
+
+**On-wire size.** SAS's SchemaDataTypes enum has no fixed-length byte
+array type. The 32-byte `attestation_hash` is encoded as `VecU8`,
+which adds a 4-byte little-endian length prefix. On-wire size is
+therefore 46 bytes, not 42:
+
+    offset  0.. 2   spec_version         (2 bytes, u16 LE)
+    offset  2.. 6   attestation_hash len (4 bytes, u32 LE, value = 32)
+    offset  6..38   attestation_hash    (32 bytes)
+    offset 38..46   signer_asserted_at  (8 bytes, i64 LE)
+
+The 42-byte figure in earlier drafts referred to the semantic payload
+(2 + 32 + 8); the on-wire encoding is 46 bytes including the length
+prefix. Reference implementations MUST encode 46 bytes.
 
 **Nothing else appears in the schema data section.** The schema is deliberately minimal; no signer, subject, activity_type, source_hash, witness_for, or provenance fields are stored on-chain. Their presence in the account data would defeat SPEC.md §5.1's non-walkability requirement, since SAS accounts are queryable by content via `memcmp` filters.
 
-**Rationale.** The 42-byte payload is sufficient for a verifier who possesses the attestation off-chain to confirm anchoring: recompute `SHA-256(canonical_bytes)`, look up the corresponding PDA (see §4), read the account, compare the on-chain hash and version, and read the Solana block time as the notarization timestamp. It is insufficient for anyone scanning the SAS program to reconstruct who signed what.
+**Rationale.** The 46-byte on-wire payload (42 bytes semantic content) is sufficient for a verifier who possesses the attestation off-chain to confirm anchoring: recompute `SHA-256(canonical_bytes)`, look up the corresponding PDA (see §4), read the account, compare the on-chain hash and version, and read the Solana block time as the notarization timestamp. It is insufficient for anyone scanning the SAS program to reconstruct who signed what.
 
 ### §3.2 Schema description field
 
@@ -93,10 +120,24 @@ The instruction MUST be invoked with:
 
 - The credential and schema from §2 and §3.
 - The nonce from §4.
-- Attestation data of exactly 42 bytes matching the schema layout in §3.1.
+- Attestation data of exactly 46 bytes on wire matching the schema layout in §3.1 (42 bytes semantic payload plus the 4-byte length prefix for the `VecU8` attestation_hash field).
 - The notary signer as the transaction fee payer.
 
 The conforming attestation's `signer` is NOT the SAS credential authority. The signing layer and SAS have different signing models; the attestation signature (Ed25519 over 248 canonical bytes per SPEC.md §3) is produced by the attestation's signer and lives off-chain, while the SAS transaction signature is produced by the notary signer authorized under the credential.
+
+### §5.1 Required instruction parameters
+
+The `CreateAttestation` instruction accepts an `expiry` field (i64 Unix
+seconds, per SAS's instruction data layout). Conforming deployments
+MUST pass `expiry = 0` on every `CreateAttestation` call, which SAS
+interprets as "never expires." Any nonzero expiry value would authorize
+SAS to accept a later `CloseAttestation` call against the account
+purely on the basis of elapsed time, which would violate SPEC §5.4's
+durability commitment.
+
+This is a substrate-level enforcement of one class of the operator
+commitment; authority-initiated Close remains reachable and is
+addressed by SPEC §5.4's operator commitment rule.
 
 **Sign locally, notarize via a service.** Because the notary signer is not the attestation signer, the common deployment pattern is:
 
@@ -131,7 +172,7 @@ Some deployments batch attestation hashes into a Merkle tree and anchor the root
 | `merkle_root` | 2 | 32 bytes | Root of the Merkle tree over member `SHA-256(canonical_bytes)` values. |
 | `batch_asserted_at` | 34 | 8 bytes | int64 Unix seconds, notary's assertion of the batch time. |
 
-Same 42-byte total. Merkle root anchors are distinguishable from individual attestation anchors only by application context; the on-chain byte structure is identical.
+Same 42-byte semantic payload (46 bytes on wire, per §3.1's `VecU8` encoding rule). Merkle root anchors are distinguishable from individual attestation anchors only by application context; the on-chain byte structure is identical.
 
 **Inclusion proofs.** For each member attestation in a batch, the notary MUST provide, on request from any verifier who possesses the canonical bytes:
 
@@ -143,7 +184,7 @@ Same 42-byte total. Merkle root anchors are distinguishable from individual atte
 
 1. Computes `SHA-256(canonical_bytes)` of the member attestation.
 2. Walks the Merkle proof to recompute the root.
-3. Reads the anchored Merkle root PDA from SAS and confirms the recomputed root matches the on-chain 32 bytes at offset 2.
+3. Reads the anchored Merkle root PDA from SAS and confirms the recomputed root matches the on-chain 32 bytes at semantic offset 2 (on-wire offset 6, after the `VecU8` length prefix).
 4. Reads the SAS transaction's block time as the notarization timestamp for the entire batch.
 
 **Merkle tree construction.** For v0.2, this specification does not normatively define the Merkle construction algorithm (binary vs unbalanced, hash prefixing for depth safety, node encoding). Implementations MUST document their construction such that a third-party verifier receiving an inclusion proof can recompute the root without out-of-band information. Extol's production Merkle construction is documented in [extol-work/extol-cortex](https://github.com/extol-work/extol-cortex) at `src/shared/merkle.ts`.
@@ -157,10 +198,11 @@ A verifier who possesses a conforming attestation (canonical bytes plus signatur
 1. Compute `attestation_hash = SHA-256(canonical_bytes)` per SPEC.md §3.1.
 2. Compute the SAS attestation PDA per §4 of this document using the deployment's credential and schema pubkeys plus `attestation_hash` as the nonce.
 3. Fetch the account at the computed PDA via any Solana RPC.
-4. If the account exists, read its schema data section (42 bytes):
-   - Confirm the `spec_version` at offset 0 matches the attestation's spec_version.
-   - Confirm the `attestation_hash` at offset 2 matches the computed value from step 1 (byte-for-byte).
-   - Read the `signer_asserted_at` at offset 34; the verifier MAY compare it to the block time of the transaction that created the account to detect signer-clock inaccuracy.
+4. If the account exists, read its schema data section (46 bytes on wire per §3.1):
+   - Confirm the `spec_version` at on-wire offset 0 matches the attestation's spec_version.
+   - Skip the 4-byte `VecU8` length prefix at on-wire offset 2 (value = 32).
+   - Confirm the `attestation_hash` at on-wire offset 6 matches the computed value from step 1 (byte-for-byte).
+   - Read the `signer_asserted_at` at on-wire offset 38; the verifier MAY compare it to the block time of the transaction that created the account to detect signer-clock inaccuracy.
 5. If the account does not exist, check whether the attestation is anchored via a batched Merkle root (§7). This requires the verifier to have obtained an inclusion proof out of band.
 6. Read the Solana block time for the account-creating transaction as the authoritative notarization timestamp per SPEC.md §2.7.
 
@@ -191,13 +233,52 @@ Each deployment publishes its credential and schema pubkeys in deployment-specif
 
 Extol's production credential and schema for mainnet-beta are published at [extol-work/extol-cortex](https://github.com/extol-work/extol-cortex) under `deploy/`.
 
-## §11 Compute cost and rate limits
+## §11 Cost economics
 
-**Per-attestation cost.** Approximately $0.0006 at Solana's current fee schedule (as of drafting). This figure is informative; Solana's fee schedule may change, and priority fees during network congestion may temporarily increase per-transaction cost.
+**Per-attestation costs.** Each individual `CreateAttestation` incurs:
 
-**Batching threshold.** Deployments anchoring more than approximately 100 attestations per day SHOULD consider Merkle batching (§7) as a cost optimization. Below that threshold, individual anchoring is simpler and the cost difference is negligible.
+- A rent-exempt SOL deposit for the SAS attestation account (~0.002 SOL
+  for a 215-byte account, approximately $0.30 at recent SOL prices).
+  This deposit is locked for the life of the account. Under SPEC §5.4's
+  operator commitment (no authority-initiated Close), this locked
+  deposit is effectively permanent.
+- Transaction fees (~5000 lamports per transaction, approximately
+  $0.0006 at recent SOL prices).
 
-**Rate limits.** SAS itself does not rate-limit. Solana RPC providers rate-limit at the transaction submission layer. Deployments SHOULD queue notary transactions and use exponential backoff on RPC failures rather than relying on the RPC to enforce ordering.
+**Total per individual attestation:** approximately $0.30, dominated
+by the rent deposit rather than the transaction fee. A deployment
+anchoring N individual attestations locks approximately N × $0.30 in
+SOL, permanently.
+
+**Solana reduced-rent upgrade (in progress).** The Solana network has
+begun a phased reduction of `lamports_per_byte` from 6,960 to 696 (a
+90% reduction), rolling out across five feature gates on Agave 4.2
+starting August 2026 with a sixth feature gate that permits reversion
+if the rollout surfaces cluster health concerns. If the full reduction
+lands, the per-attestation rent deposit drops from approximately $0.30
+to approximately $0.03. The economic argument for Merkle batching
+weakens by a factor of ten but does not disappear: at scale
+(millions of attestations), $30K locked is still qualitatively
+different from $300 locked. See [solana.com/upgrades/reduced-rent](https://solana.com/upgrades/reduced-rent)
+for current activation status. Implementations SHOULD NOT rely on the
+reduction until all five feature gates have activated on the deployment's
+target cluster.
+
+**Merkle batching is the production path for volume deployments.** A
+deployment anchoring more than approximately 100 attestations per day
+SHOULD use Merkle batching (§7) as the primary anchoring path. Under
+Merkle batching, a single SAS attestation account (one $0.30 locked
+deposit, or ~$0.03 post-reduction) anchors thousands of member hashes;
+the amortized locked cost per member attestation drops to fractions of
+a cent under either rent regime.
+
+Individual anchoring remains appropriate for low-volume deployments
+where the batching operational overhead (Merkle tree construction,
+inclusion proof storage, off-chain proof serving) is not justified.
+
+**Rate limits.** SAS itself does not rate-limit. Solana RPC providers
+rate-limit at the transaction submission layer. Deployments SHOULD
+queue notary transactions and use exponential backoff on RPC failures.
 
 ---
 

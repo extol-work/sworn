@@ -435,7 +435,7 @@ This is the discipline that keeps the notary from becoming a walkable dossier. T
 
 ### §5.2 Merkle batching
 
-Some notary deployments batch attestation hashes into a Merkle tree and publish only the root as a cost optimization. This specification does not define a normative Merkle format at v0.2.
+Some notary deployments batch attestation hashes into a Merkle tree and publish only the root as a cost optimization. For volume deployments, Merkle batching is the production path rather than a nice-to-have: see bindings/sas.md §11 for the economic argument (per-account rent-exempt SOL deposits dominate individual-anchor costs and remain locked under SPEC §5.4's operator commitment). This specification does not define a normative Merkle format at v0.2.
 
 **Requirements for batching implementations.** An implementation that batches MUST anchor the resulting Merkle root as a distinct notary record satisfying §5.1 and MUST provide off-chain inclusion proofs to verifiers on request. Inclusion proofs verified against a batched root MUST resolve to the individual attestation's `SHA-256(canonical_bytes)` per §5.1's independent-recomputation rule.
 
