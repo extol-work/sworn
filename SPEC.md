@@ -10,6 +10,30 @@
 
 ## §1 Overview
 
+This is a working design document at draft v0.2. It defines a signed-fact
+byte layout, an Ed25519 signature scheme over that layout, and a
+Solana Attestation Service binding for anchoring the resulting hashes.
+It is not a submitted protocol. Conformance testing infrastructure that
+a submitted protocol would carry (a public test suite, an independent
+verification harness, a certification process) is out of scope for this
+revision.
+
+MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY (per RFC 2119) appear
+throughout in sections where they apply to concrete byte-level or
+algorithm-level rules. Those requirements are enforceable regardless
+of the specification's publication status: an implementation whose
+canonical byte layout differs by one byte cannot verify against any
+implementation whose layout is correct. Where the vocabulary appears in
+sections that describe adopter disciplines rather than byte-level rules,
+it captures the intent of the discipline, not a test we can run against
+an implementation.
+
+Reference implementations exist at
+[extol-work/notary](https://github.com/extol-work/notary) (Rust CLI,
+Layers 1+2+4+5) and [extol-work/sworn-postgres](https://github.com/extol-work/sworn-postgres)
+(Layers 1+2 only, pre-v0.2 canonical bytes). Neither is a certification
+authority.
+
 ### §1.1 What this specifies
 
 This specification defines how a signer produces a signed statement of fact, how that statement's cryptographic identity is committed to a public ledger, and how a later verifier confirms both the signature and the ledger commitment without trusting the platform that produced the statement.
@@ -38,7 +62,7 @@ That is the whole specification. Interpretations of the attestation, its social 
 
 **Notarization substrate.** The public, tamper-evident ledger where attestation identifying hashes are committed. In v0.2 this is Solana Attestation Service (SAS) as defined in bindings/sas.md. Other substrates may satisfy Layer 1 and Layer 2 only (see bindings/postgres.md); they do not offer Layer 4 conformance.
 
-**Conforming implementation.** Software that produces, stores, notarizes, and verifies attestations per this specification. See §10 for the levels of conformance.
+**Conforming implementation.** Software that produces, stores, notarizes, and verifies attestations per this specification. See §10 for the implementation-level checklists.
 
 ### §1.3 Layer model
 
@@ -429,13 +453,33 @@ Layer 1's `retention_hint` field (§2.7) expresses the signer's intent regarding
 
 ### §5.4 Durability of the notary hash
 
-Once published, the notary hash MUST NOT be revoked, mutated, or reversed by the notarization substrate under any protocol-visible circumstance. A verifier can rely on the invariant that a hash present today was present at its published timestamp and will remain present for as long as the substrate itself exists.
+**Substrate reality.** SAS supports a `CloseAttestation` instruction
+that any authorized signer of the credential can invoke. Once invoked
+against a specific attestation account, the account is deallocated and
+the notary hash is no longer discoverable through substrate reads. This
+is a property of SAS, not a property this specification alters.
+
+**Operator commitment.** A conforming Layer 4 deployment MUST commit,
+publicly and in adopter-facing documentation, that its credential
+authority will not invoke `CloseAttestation` against conforming
+attestations. The commitment is enforceable by adopter policy
+(governance controls on the credential authority, multisig requirements
+on administrative operations, published incident-response procedures);
+it is not enforceable by the specification alone.
+
+**Additive revocation.** Per §4.3, revocation is expressed as a new
+attestation. The revocation is anchored per §5.1; the target
+attestation's notary hash is unaffected by the revocation itself. If
+the credential authority additionally closes the target account, the
+target's notary anchor is gone and only the revocation attestation
+remains as a signed statement. A conforming deployment MUST NOT do this;
+combining revocation with authority-initiated Close would be
+indistinguishable from unilateral erasure and would violate the operator
+commitment above.
 
 **Substrate-level failure modes** (chain reorganizations, ledger rollbacks) are out of protocol scope. Implementations SHOULD document what substrate-level guarantees they provide.
 
-**Revocation is additive.** Per §4.3, revocation is expressed as a new attestation. The revocation is anchored per §5.1; the target attestation's notary hash is unaffected. Substrates MUST NOT interpret a revocation as license to delete or hide the target's notary hash.
-
-**Substrate compromise.** If a substrate is discovered to have violated its published durability guarantees, attestations anchored to it lose the temporal grounding the substrate was providing. Signatures remain cryptographically valid; the "hash existed at time T" property collapses. Substrate-compromise recovery is not standardized in v0.2.
+**Substrate compromise.** If a substrate is discovered to have violated its published durability guarantees, attestations anchored to it lose the temporal grounding the substrate was providing. Signatures remain cryptographically valid; the "hash existed at time T" property collapses. Substrate-compromise recovery is not standardized in v0.2. Authority-initiated `CloseAttestation` against a conforming attestation is one class of substrate compromise a verifier can detect: an attestation whose account no longer exists but whose canonical bytes are known and hash correctly indicates the operator commitment above has been broken. Verifiers SHOULD treat authority-initiated Close as a durability failure by the operator, distinct from RPC unavailability or transient read errors.
 
 ### §5.5 Off-chain payload storage
 
@@ -455,19 +499,91 @@ Layer 5 defines how third parties interact with attestations after Layer 4 has a
 
 ### §6.1 Verification endpoint contract
 
-A conforming implementation MUST expose a verification interface that, given an attestation identifier known to the caller, returns:
+Layer 5 verification is served by two distinct paths.
 
-- the full canonical bytes of the attestation (or the primitive fields sufficient for the caller to reconstruct them per §3.1);
-- the signature (64 bytes, per §3.2);
-- the `activity_type` URI (from which `activity_hash` derives per §2.4);
-- the notary-published `attestation_hash` (per §5.1) sufficient for the caller to confirm anchoring against the notary;
-- the metadata required to interpret provenance fields (per §2.5).
+**Bearer-bytes verify (primary, operator-independent).** A verifier
+who possesses an attestation's canonical bytes and signature performs
+verification locally:
 
-The verification interface MUST NOT return the payload. Payload disclosure is a distinct operation per §6.2.
+1. Reconstruct or accept the 248-byte canonical byte sequence per §3.1.
+2. Verify the Ed25519 signature over those bytes per §3.2.
+3. Recompute `attestation_hash = SHA-256(canonical_bytes)`.
+4. Derive the substrate anchor address per the applicable Layer 4
+   binding (e.g., bindings/sas.md §4 for SAS).
+5. Fetch the anchor account from the substrate and confirm the on-chain
+   record matches the recomputed hash and spec_version.
+
+This path requires no operator involvement. It is the honest form of
+"verification without trusting the platform of origin." It is available
+whenever the verifier holds the bytes, regardless of whether an
+operator-hosted Layer 5 endpoint exists or is reachable.
+
+**Operator-hosted lookup (convenience, operator-dependent).** A
+verifier who possesses only a `disclosure_identifier` (see below) may
+present it to the operator's Layer 5 endpoint. The operator MUST
+return the full canonical bytes and signature (subject to §6.4's
+refused operations). The verifier then performs bearer-bytes verify
+against the returned data. The verification interface MUST NOT return
+the payload; payload disclosure is a distinct operation per §6.2.
 
 Transport is implementation-defined (HTTP, gRPC, CLI, direct substrate query, in-process library call).
 
-**Independent verification.** Regardless of transport, a caller receiving the verification response MUST be able to independently reconstruct the canonical bytes, recompute `SHA-256(canonical_bytes)` and confirm equality with the notary-published `attestation_hash`, and verify the Ed25519 signature. An implementation whose response cannot be independently verified this way is NOT conforming, even if it returns a valid-looking status.
+**`disclosure_identifier` construction and required properties.**
+
+A `disclosure_identifier` is a 32-byte opaque value generated per
+attestation from a cryptographically secure random source, stored
+alongside the attestation by the operator, and delivered to
+legitimate holders at attestation creation time. Construction:
+
+    disclosure_identifier = crypto_random_bytes(32)
+
+Implementations MUST use an OS-level or hardware CSPRNG (e.g.,
+`/dev/urandom`, `crypto.randomBytes` in Node, `os.urandom` in Python).
+General-purpose PRNGs (`Math.random()`, `rand()`, non-crypto libraries)
+MUST NOT be used.
+
+The identifier has no derivation relationship to `attestation_hash`,
+`signer`, `subject`, or any other attestation content. This
+independence is the property that defeats enumeration-via-derivation
+attacks: an attacker who possesses the on-chain `attestation_hash`
+has no computational path to a valid `disclosure_identifier`.
+
+**Uniqueness.** Operators MUST enforce uniqueness of
+`disclosure_identifier` in their storage layer. At 32-byte width with
+CSPRNG entropy, natural collisions are cryptographically infeasible
+(birthday probability ~2^-128 per pair at any realistic scale), but
+the storage-layer constraint transforms this from "will not happen"
+into "cannot happen"; on the astronomically unlikely rejection, the
+operator regenerates a fresh identifier and retries.
+
+**Rotation.** Rotation is per-attestation: the operator generates a
+fresh `disclosure_identifier`, updates the stored value, invalidates
+the old value at the Layer 5 endpoint, and notifies legitimate
+holders of the new value out-of-band. There is no global key to
+rotate, no scheduled rotation requirement, and no expiry. Most
+identifiers are never rotated; rotation is appropriate only when a
+specific identifier is suspected to have leaked to a party the
+signer or subject did not intend.
+
+**MUST NOT.** A conforming Layer 5 endpoint MUST NOT accept the
+on-chain `attestation_hash` as an identifier. Accepting the on-chain
+value as the lookup key exposes every hash the substrate publishes to
+enumeration via scrape-and-verify.
+
+**MAY.** Operators MAY use different identifier construction schemes
+provided the identifier space satisfies the enumeration-resistance
+property: no combination of publicly-observable substrate values, and
+no derivation from any such value, MUST yield a valid identifier
+without operator-held state. Random-per-attestation is the reference
+scheme; keyed-derivation schemes are permitted but MUST also satisfy
+this property.
+
+**Independent verification requirement.** Regardless of which path a
+verifier used to obtain the canonical bytes, the verifier MUST be
+able to independently reconstruct the canonical bytes, recompute
+`SHA-256(canonical_bytes)`, and verify the Ed25519 signature. An
+implementation that returns a valid-looking status without allowing
+the caller to perform these checks is NOT conforming.
 
 ### §6.2 Two-call design: verify then disclose
 
@@ -479,7 +595,7 @@ Verification and payload disclosure are separate operations. Verification (§6.1
 
 ### §6.3 Disclosure token semantics
 
-A disclosure token authorizes exactly one retrieval of one attestation's payload. The token binds three properties: the specific attestation (by ID or hash), a time window during which the token is redeemable, and a single-use consumption guarantee.
+A disclosure token authorizes exactly one retrieval of one attestation's payload. The token binds three properties: the specific attestation (by its `disclosure_identifier` per §6.1), a time window during which the token is redeemable, and a single-use consumption guarantee.
 
 **Required properties.**
 
@@ -487,6 +603,8 @@ A disclosure token authorizes exactly one retrieval of one attestation's payload
 - **Time-bounded.** Every token has an expiration. Implementations MUST reject expired tokens with a distinct error class from single-use exhaustion. Recommended range: minimum floor of 60 seconds, maximum ceiling of 7 days for single-use tokens.
 - **Signer-authorized.** A disclosure token MUST be issued by proof of control of the attestation's signing key or by a mechanism the signer has explicitly authorized. Implementations MUST NOT permit unauthenticated parties to mint disclosure tokens for arbitrary attestations.
 - **Domain-separated.** The bytes signed to authorize token issuance MUST NOT be substitutable for the canonical byte sequence of any attestation (§3.1) or the canonical form of any other operation defined by this specification. Implementations MUST use a domain separator that cannot collide with attestation canonical bytes; the reference domain separator is the literal string `sworn-disclosure-token-v1`.
+
+**Target binding.** The bytes signed to authorize a disclosure token MUST bind the target attestation's `disclosure_identifier` (§6.1), not its `attestation_hash`. Binding the token to the on-chain `attestation_hash` would let any party who scraped the substrate mint token-issuance requests against every published hash; binding to the random `disclosure_identifier` restricts token minting to parties who already possess the operator-issued identifier. `attestation_hash` remains referenced inside the disclosure flow for payload-authenticity checks (§6.2) after the canonical bytes have been returned.
 
 ### §6.4 Refused operations
 
@@ -500,7 +618,7 @@ A conforming implementation MUST NOT expose operations that enumerate attestatio
 
 Implementations MUST return an explicit refusal (not treat these as absent features). The refusal is a first-class part of the presentation contract: an implementer testing conformance MUST observe the refusal to confirm the discipline is enforced.
 
-**Rationale.** The design commitment is that the attestation graph is verifiable without being enumerable. A verifier holding an attestation identifier can confirm its authenticity; a party who does not hold an identifier cannot bulk-discover the graph's contents. The discipline is enforced at Layer 5 because it is the layer where callers meet the system. A raw substrate scan that bypassed this layer (for example, an unrestricted `getProgramAccounts` scan) is not itself a conforming presentation. §5.1's PDA-seed discipline exists so that even a raw substrate scan does not become a walkable index.
+**Rationale.** The design commitment is that the attestation graph is verifiable without being enumerable. A verifier holding an attestation identifier can confirm its authenticity; a party who does not hold an identifier cannot bulk-discover the graph's contents. The enumeration-refusal discipline is now enforced by two complementary rules: substrate-side non-walkability (§5.1's PDA seed discipline) and Layer 5's requirement (§6.1) that lookup identifiers have no derivation relationship to publicly-observable substrate values. A raw substrate scan that bypassed Layer 5 (for example, an unrestricted `getProgramAccounts` scan) yields only opaque hashes; those hashes are not accepted as Layer 5 lookup identifiers, so scrape-and-verify collapses. Earlier drafts framed rate limiting as sufficient to prevent identifier probing; under random-per-attestation identifiers, guessing a valid 32-byte identifier is an unconstrained search over 2^256 values, which is not a feasible attack at any resource level. The discipline is enforced at Layer 5 because it is the layer where callers meet the system.
 
 **Signer-scoped exceptions.** A signer authenticated to their own key MAY retrieve a list of their own attestations. This is self-service reflection, not enumeration by third parties. Implementations offering this MUST authenticate the request as coming from the signer's key.
 
@@ -508,12 +626,12 @@ Implementations MUST return an explicit refusal (not treat these as absent featu
 
 ### §6.5 Rate limiting
 
-Implementations MUST offer rate limiting on the verification and disclosure interfaces to prevent enumeration-by-timing (probing candidate identifiers to discover which resolve) and disclosure-endpoint abuse.
+Implementations offer rate limiting on the verification and disclosure interfaces to prevent disclosure-endpoint abuse. Under §6.1's random-per-attestation `disclosure_identifier` discipline, enumeration-by-timing (probing candidate identifiers to discover which resolve) is not the primary concern for the verification endpoint: guessing a valid 32-byte identifier is an unconstrained search over 2^256 values and is infeasible at any resource level.
 
 **Required posture.**
 
-- The verification interface SHOULD carry a per-caller rate limit sufficient to prevent enumeration probing. Precise numeric thresholds are implementation-defined.
-- The disclosure interface MUST carry a stricter rate limit than the verification interface, since disclosure returns payload bytes.
+- The verification interface SHOULD carry a per-caller rate limit as a general abuse-mitigation measure. Precise numeric thresholds are implementation-defined. This is no longer a MUST because valid identifiers are not guessable.
+- The disclosure interface MUST carry a rate limit, and MUST be stricter than the verification interface, since disclosure returns payload bytes independent of identifier space.
 - Implementations MUST distinguish rate-limited responses from other error classes so callers can back off appropriately.
 - Rate-limit tracking MUST NOT create a signer profile. Implementations MAY track per-IP or per-session request counts but MUST NOT correlate rate-limit state with signer identity.
 
@@ -570,6 +688,18 @@ The canonical byte sequence commits to `data_hash`, a SHA-256 of the canonicaliz
 Note the interaction with §5.1: the notary substrate itself does not expose these fields via a walkable index. But any party holding the canonical bytes (through legitimate presentation or through a payload disclosure) learns all of them.
 
 **Subject design.** If an activity type places a real-world identifier directly into `subject` (a bare email, a legal name), that identifier is present in the canonical bytes and therefore learnable by any legitimate holder of them. Schemas that need subject privacy SHOULD use a content hash of an identifier plus a per-subject salt held by the signer, not the identifier itself.
+
+**source_hash entropy.** Several registered `source_type`
+canonicalizations use low-entropy inputs (sequential integer IDs,
+short account handles, timestamped platform IDs). A `source_hash` over
+a low-entropy preimage is reversible by any party that can enumerate
+the preimage space. Schemas relying on `source_hash` as an
+identifier-hiding mechanism SHOULD verify their canonicalization has
+sufficient preimage entropy (rule of thumb: 2^80 or more possible
+preimages for the source class in question) or add a per-source salt
+to the canonicalization. Schemas that do not verify entropy MUST NOT
+rely on `source_hash` for identifier hiding; treat it as a correlator
+only.
 
 ### §8.2 Signer-authorized disclosure
 
@@ -665,6 +795,13 @@ The `source_type` field (§2.5) is a u16 whose registered values are given below
 
 For each value, this registry specifies the canonical string label, what the source represents, and how implementations MUST derive `source_hash` for that source_type. Cross-implementation source-identity matching depends on all implementations agreeing on the derivation procedure.
 
+**Preimage entropy.** Several `source_type` values use low-entropy
+canonicalizations (sequential IDs, short handles). A verifier who has
+`source_hash` and knows the source class can reverse to the original
+identifier by enumerating the preimage space. This is a correlator,
+not an identifier-hiding mechanism. See §8.1 for schemas relying on
+identifier hiding.
+
 | # | Slug | Description | source_hash canonicalization |
 |---|---|---|---|
 | 0 | `unknown` | Source not classified. | `source_hash` MUST be 32 zero bytes. |
@@ -712,6 +849,17 @@ The `witnessing_depth` field (§2.5) is a u8. Integer positions are stable per �
 | 4 | `computed_match` | The signer is a machine process that produced the claim by matching against reference data. |
 | 5 | `self_asserted` | The subject and signer are the same party; no separate witnessing occurred. |
 
+**Cross-field verification.** A verifier MUST reject an attestation
+where `witnessing_depth = 5` (`self_asserted`) but the signed
+canonical bytes have `signer != subject`. This value is defined
+as "the subject and signer are the same party"; a signer who claims
+this value while attesting about a different subject has produced
+an attestation whose provenance fields are internally
+contradictory.
+
+Signers MUST NOT set `witnessing_depth = 5` on attestations where
+`signer != subject`.
+
 ### §9.4 attestor_relationship registry
 
 The `attestor_relationship` field (§2.5) is a u8. Integer positions are stable per §1.5.
@@ -726,6 +874,16 @@ The `attestor_relationship` field (§2.5) is a u8. Integer positions are stable 
 | 5 | `unaffiliated` | The signer has no prior relationship to the subject. |
 | 6 | `institution` | The signer is an institutional or automated entity attesting on behalf of a platform, employer, or ingestion pipeline. |
 
+**Cross-field verification.** A verifier MUST reject an attestation
+where `attestor_relationship = 1` (`self`) but the signed canonical
+bytes have `signer != subject`. This value is defined as "the signer
+and subject are the same party"; a signer who claims this value while
+attesting about a different subject has produced an attestation whose
+provenance fields are internally contradictory.
+
+Signers MUST NOT set `attestor_relationship = 1` on attestations where
+`signer != subject`.
+
 ### §9.5 Signature algorithm registry
 
 Ed25519 is the sole registered signature algorithm in v0.2. Future versions may register additional algorithms per §3.3.
@@ -736,15 +894,15 @@ In v0.2 the sole registered notarization substrate is Solana Attestation Service
 
 ---
 
-## §10 Conformance
+## §10 Implementation checklists
 
-Conformance to this specification is defined by what an implementation can produce, consume, and refuse.
+This section describes what an implementation at each level does. It is a working checklist for implementers, not a conformance claim: this document does not carry a public test suite, an independent verification harness, or a certification process (see the preamble to §1). Every rule listed here remains a MUST for what an implementation at that level does; what is deferred is the framing that would treat the checklists as a submitted-protocol conformance obligation.
 
-### §10.1 Conformance levels
+### §10.1 Implementation levels
 
-An implementation MAY conform at one of three levels. Each higher level entails the lower ones.
+An implementation MAY operate at one of three levels. Each higher level entails the lower ones.
 
-**Level 1: Verifier.** An implementation that can consume, validate, and reason about attestations produced by any other conforming implementation. A verifier MUST:
+**Level 1: Verifier.** An implementation that can consume, validate, and reason about attestations produced by any other implementation of this specification. A verifier MUST:
 
 - Reconstruct the 248-byte canonical byte sequence (§3.1) from a stored attestation's fields.
 - Verify Ed25519 signatures per §3.2 (PureEdDSA, no pre-hashing).
@@ -752,13 +910,15 @@ An implementation MAY conform at one of three levels. Each higher level entails 
 - Recompute `SHA-256(canonical source identifier)` per §9.2's per-source-type canonicalization when checking source integrity.
 - Recompute `SHA-256(target_canonical_bytes)` when interpreting revocation references per §4.3.
 - Reject attestations whose `spec_version` marker (§3.1) is unknown to the implementation, distinguishing that failure from signature invalidity.
+- Reject attestations whose `witnessing_depth = 5` (`self_asserted`) but whose signed canonical bytes have `signer != subject`, per §9.3.
+- Reject attestations whose `attestor_relationship = 1` (`self`) but whose signed canonical bytes have `signer != subject`, per §9.4.
 - Refuse enumeration and bulk-retrieval operations at any Layer 5 endpoint per §6.4.
 
 A verifier MAY be embedded in a browser, a library, a command-line tool, or a service.
 
 **Level 2: Signer.** A verifier that also produces new attestations. A signer MUST additionally:
 
-- Construct canonical byte sequences that pass byte-for-byte verification against §10.4's reference vectors.
+- Construct canonical byte sequences that verify byte-for-byte against reference implementations of this specification.
 - Generate nonces per §3.4's uniqueness and unpredictability rules.
 - Self-verify its own signatures before publishing them, catching client-side signing bugs before they propagate.
 - Populate provenance fields per §2.5, including the zero-hash rule for sourceless `source_type` values (§2.4) and the range and enum constraints (§9.2 through §9.4).
@@ -768,35 +928,6 @@ A verifier MAY be embedded in a browser, a library, a command-line tool, or a se
 - Publish the notary record satisfying §5.1's requirements, using the PDA derivation from bindings/sas.md §3.
 - Not invoke the forbidden SAS instructions listed in bindings/sas.md §4.
 - Provide independent hash recomputation as required by §5.1.
-
-### §10.2 Interoperability tests
-
-Every level MUST pass the golden-vector suite at fixtures/attestations/. Vectors are byte-exact: an implementation whose serializer produces different bytes than the vectors for the same inputs is not conforming.
-
-Notarizers MUST additionally pass the SAS binding test suite at fixtures/tests/sas/. Signers and verifiers MUST additionally pass the HTTP conformance test suite at fixtures/tests/http/ against their Layer 5 endpoint.
-
-### §10.3 Registration process
-
-There is no central registry of conforming implementations in v0.2. An implementation MAY self-declare conformance by:
-
-- Passing the golden-vector suite for its declared level.
-- Publishing the passing test output alongside the implementation's source repository.
-- Documenting its Layer 4 substrate binding (for notarizers) or its Level 1-2 partial-conformance status (for signers-without-notarization).
-
-A formal registration process is reserved for a future version once implementer adoption justifies it.
-
-### §10.4 Reference test vectors
-
-The canonical set of test vectors lives at fixtures/attestations/v0.2/vectors.json in the specification repository. Each vector specifies:
-
-- inputs for constructing an attestation;
-- the expected canonical byte sequence in hex;
-- the expected Ed25519 signature under a specified test key;
-- the expected `attestation_hash` (SHA-256 of canonical bytes).
-
-Implementations MUST produce byte-identical canonical sequences and hash values for the specified inputs. An implementation whose output differs from any vector is not conforming.
-
-Vectors cover the meaningful edge cases: sourceless attestations (source_type ∈ {0, 1}), sourced attestations across each registered source_type, revocations, and attestations with each combination of witness_for-populated and unpopulated states.
 
 ---
 
