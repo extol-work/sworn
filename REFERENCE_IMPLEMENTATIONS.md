@@ -8,9 +8,9 @@ Implementations differ in the layers they cover, the language they use, and the 
 
 | Implementation | Language | Scope | Notes | Status |
 |---|---|---|---|---|
-| [extol-work/notary](https://github.com/extol-work/notary) | Rust | Layers 1+2+4 (SAS binding) | Portable full-stack reference implementation. CLI: `attest`. Source of truth for the 248-byte canonical layout, Ed25519 PureEdDSA signing, RFC 8785 payload hashing, activity_hash NFC discipline, and PDA seed derivation per [bindings/sas.md](./bindings/sas.md). Ships with [golden test vectors](./fixtures/) that every conforming implementation must reproduce byte-for-byte. | Active |
+| [extol-work/notary](https://github.com/extol-work/notary) | Rust | Layers 1+2+4+5 | Portable full-stack reference implementation. CLI: `attest`. Source of truth for the 248-byte canonical layout, Ed25519 PureEdDSA signing, RFC 8785 payload hashing, activity_hash NFC discipline, PDA seed derivation per [bindings/sas.md](./bindings/sas.md), and disclosure-token issue/redeem per SPEC §6.3. Ships with [golden test vectors](./fixtures/) that every conforming implementation must reproduce byte-for-byte. | Active |
 | [@extol-work/notary](https://www.npmjs.com/package/@extol-work/notary) ([source](https://github.com/extol-work/brij/tree/main/packages/notary)) | TypeScript | Layers 1+2 | npm package. Canonical byte serialization and Ed25519 verification for browser and Node consumers. Ports the Rust reference byte-for-byte; validated against the same golden vectors on every publish. Layers 4 and 5 subpaths (`@extol-work/notary/sas`, `@extol-work/notary/disclose`) are reserved for future releases; adopters needing Layer 4 today should use the Rust CLI or integrate `@solana/web3.js` directly against the SAS binding. | Active |
-| [extol-work/extol-cortex](https://github.com/extol-work/extol-cortex) | Rust + TypeScript | Layers 1+2+4 | ¹ Operator deployment reference. Extol's production notary deployment. Implements the specification correctly but includes Extol-specific product concerns (identity derivation from platform IDs, treasury coordination, callback routing to the brij application layer). Useful as a wiring example for operators building end-to-end deployments; **not** a clean-room portable reference. | Active |
+| [extol-work/extol-cortex](https://github.com/extol-work/extol-cortex) | Rust + TypeScript | Layers 1+2+4 | ¹ Operator deployment reference. Extol's production notary deployment. Implements the specification correctly but includes Extol-specific product concerns (identity derivation from platform IDs, treasury coordination, callback routing to the brij application layer). Useful as a wiring example for operators building end-to-end deployments; **not** a clean-room portable reference. Currently anchoring under v0.1-final; migrating to v0.2 per EXT-247. New adopters should treat the notary CLI as the current-generation portable reference until the migration completes. | Active |
 
 ¹ **On the Cortex row.** Extol operates Cortex as its production notary and its code is genuinely useful for adopters asking "how does an operator wire this up from RPC to database to reader?" But Cortex code includes product concerns that are not part of this specification (community model, wallet coordination, cross-service callback signing, tier-based rate limiting). Adopters implementing this specification for their own operators should treat Cortex as a wiring reference for operational shape, not a portable reference for the specification itself. The `extol-work/notary` CLI is the portable reference.
 
@@ -20,7 +20,7 @@ Implementations that predate the current spec version. Preserved for reference a
 
 | Implementation | Version pinned | Scope | Notes |
 |---|---|---|---|
-| [extol-work/sworn-postgres@b13c74d](https://github.com/extol-work/sworn-postgres/tree/b13c74d) | v0.1-final (spec_version = 2) | Layers 1+2 (Postgres binding) | Working example of Layer 1+2 partial conformance under v0.1-final, with a Postgres-backed anchoring surface. Not maintained against v0.2. Verifiers of pre-v0.2 attestations that were anchored to sworn-postgres can pin this SHA to reproduce the older canonical byte layout (position 178: `created_at` rather than `signer_asserted_at`, `spec_version = 2` rather than 3). See the deprecation banner on the linked repo for details. |
+| [extol-work/sworn-postgres@b13c74d](https://github.com/extol-work/sworn-postgres/tree/b13c74d) | v0.1-final (spec_version = 2) | Layers 1+2 (Postgres binding) | Working example of Layer 1+2 partial conformance under v0.1-final, with a Postgres-backed anchoring surface. Not maintained against v0.2. Verifiers of pre-v0.2 attestations that were anchored to sworn-postgres can pin this SHA to reproduce the older canonical byte layout (`spec_version = 2`; the field at what is now `signer_asserted_at` was named `created_at` in v0.1-final). See the deprecation banner on the linked repo for details. |
 
 ## Choosing a reference
 
@@ -42,6 +42,9 @@ Open a pull request against this file adding a row to either the Current or Hist
 - Language
 - Layers covered
 - A pointer to your test suite or golden-vector conformance runner
-- Your maintenance intent (Active, Best-effort, or Reference-only)
+- Your maintenance intent, using one of:
+  - **Active** — you keep the implementation aligned with the current spec version and intend to update it when the spec advances.
+  - **Best-effort** — you maintain the implementation as time allows; adopters should not assume immediate spec-alignment on version bumps.
+  - **Reference-only** — you consider the implementation feature-complete at its current spec version and do not intend further updates; behaves as a Historical row from adopters' point of view even if the spec version currently matches.
 
 Implementations that pass the golden vectors at `fixtures/v0.2/vectors.json` byte-for-byte are welcome regardless of language, substrate, or organizational affiliation. Passing conformance is a matter of matching bytes, not being endorsed by Extol.

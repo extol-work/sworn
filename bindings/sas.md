@@ -288,4 +288,4 @@ queue notary transactions and use exponential backoff on RPC failures.
 
 Reference implementations of this specification — portable references for the canonical bytes and SAS binding, and Extol's own operator deployment reference — are listed in [REFERENCE_IMPLEMENTATIONS.md](../REFERENCE_IMPLEMENTATIONS.md) at the repository root.
 
-Where any reference implementation and this specification disagree, the specification wins pending the code being updated.
+Where any Active implementation and this specification disagree, the specification wins and the implementation gets updated to close the gap. Historical implementations may permanently diverge from the current spec — that is what "historical" means.
