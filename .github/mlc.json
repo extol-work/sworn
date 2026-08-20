@@ -1,6 +1,7 @@
 {
   "ignorePatterns": [
-    { "pattern": "^https://sworn\\.extol\\.work" }
+    { "pattern": "^https://sworn\\.extol\\.work" },
+    { "pattern": "^https://www\\.npmjs\\.com/" }
   ],
   "timeout": "20s",
   "retryOn429": true,

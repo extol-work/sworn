@@ -77,7 +77,7 @@ Cross-implementation validation runs sworn-postgres's vector emitter against the
 
 ## §6 Relationship to Extol's production deployment
 
-Extol's production deployment does not use sworn-postgres as its signing surface. Extol's signing happens in the passkey-derived client flow described in the [extol-work/extol-cortex](https://github.com/extol-work/extol-cortex) documentation, with SAS as the notary via bindings/sas.md.
+Extol's production deployment does not use sworn-postgres as its signing surface. Extol's signing happens in a passkey-derived client flow, with SAS as the notary via bindings/sas.md. See [REFERENCE_IMPLEMENTATIONS.md](../REFERENCE_IMPLEMENTATIONS.md) for the current state of Extol's Cortex deployment; source is not currently public.
 
 sworn-postgres exists as a reference implementation and interoperability anchor, not as a production dependency. Its role is to prove that the specification's byte layout and signature semantics are reproducible outside Extol's application stack. If sworn-postgres and Extol's client-side implementation ever produced different canonical bytes for the same input, the specification would have failed at Layer 1 or 2.
 

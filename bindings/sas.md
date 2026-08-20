@@ -189,7 +189,7 @@ Same 42-byte semantic payload (46 bytes on wire, per §3.1's `VecU8` encoding ru
 3. Reads the anchored Merkle root PDA from SAS and confirms the recomputed root matches the on-chain 32 bytes at semantic offset 2 (on-wire offset 6, after the `VecU8` length prefix).
 4. Reads the SAS transaction's block time as the notarization timestamp for the entire batch.
 
-**Merkle tree construction.** For v0.2, this specification does not normatively define the Merkle construction algorithm (binary vs unbalanced, hash prefixing for depth safety, node encoding). Implementations MUST document their construction such that a third-party verifier receiving an inclusion proof can recompute the root without out-of-band information. Extol's production Merkle construction is documented in [extol-work/extol-cortex](https://github.com/extol-work/extol-cortex) at `src/shared/merkle.ts`.
+**Merkle tree construction.** For v0.2, this specification does not normatively define the Merkle construction algorithm (binary vs unbalanced, hash prefixing for depth safety, node encoding). Implementations MUST document their construction such that a third-party verifier receiving an inclusion proof can recompute the root without out-of-band information.
 
 A normative Merkle construction is targeted for v0.3.
 
@@ -232,8 +232,6 @@ Third-party deployments MAY choose either option. Both are conforming to v0.2 fo
 | Devnet | `22zoJMtdu4tQc2PzL74ZUT7FrwgB1Udec8DdW4yw4BdG` | Test environment. |
 
 Each deployment publishes its credential and schema pubkeys in deployment-specific documentation. Verifiers who want to confirm anchoring against a specific deployment need the deployment's credential and schema pubkeys as inputs to §4's PDA derivation.
-
-Extol's production credential and schema for mainnet-beta are published at [extol-work/extol-cortex](https://github.com/extol-work/extol-cortex) under `deploy/`.
 
 ## §11 Cost economics
 
