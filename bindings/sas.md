@@ -78,6 +78,8 @@ prefix. Reference implementations MUST encode 46 bytes.
 
 **Rationale.** The 46-byte on-wire payload (42 bytes semantic content) is sufficient for a verifier who possesses the attestation off-chain to confirm anchoring: recompute `SHA-256(canonical_bytes)`, look up the corresponding PDA (see §4), read the account, compare the on-chain hash and version, and read the Solana block time as the notarization timestamp. It is insufficient for anyone scanning the SAS program to reconstruct who signed what.
 
+**Reference implementation.** The layout type codes, on-wire encoding, and `CreateSchema` invocation are implemented in [`extol-work/notary/src/sas.rs`](https://github.com/extol-work/notary/blob/main/src/sas.rs). See [REFERENCE_IMPLEMENTATIONS.md](../REFERENCE_IMPLEMENTATIONS.md) for other implementations of this binding.
+
 ### §3.2 Schema description field
 
 The schema's description field (if the SAS deployment supports one) SHOULD contain the string `v0.2 notary anchor: spec_version || attestation_hash || signer_asserted_at`. This is informative metadata; it does not affect verification.
@@ -187,7 +189,7 @@ Same 42-byte semantic payload (46 bytes on wire, per §3.1's `VecU8` encoding ru
 3. Reads the anchored Merkle root PDA from SAS and confirms the recomputed root matches the on-chain 32 bytes at semantic offset 2 (on-wire offset 6, after the `VecU8` length prefix).
 4. Reads the SAS transaction's block time as the notarization timestamp for the entire batch.
 
-**Merkle tree construction.** For v0.2, this specification does not normatively define the Merkle construction algorithm (binary vs unbalanced, hash prefixing for depth safety, node encoding). Implementations MUST document their construction such that a third-party verifier receiving an inclusion proof can recompute the root without out-of-band information. Extol's production Merkle construction is documented in [extol-work/extol-cortex](https://github.com/extol-work/extol-cortex) at `src/shared/merkle.ts`.
+**Merkle tree construction.** For v0.2, this specification does not normatively define the Merkle construction algorithm (binary vs unbalanced, hash prefixing for depth safety, node encoding). Implementations MUST document their construction such that a third-party verifier receiving an inclusion proof can recompute the root without out-of-band information.
 
 A normative Merkle construction is targeted for v0.3.
 
@@ -230,8 +232,6 @@ Third-party deployments MAY choose either option. Both are conforming to v0.2 fo
 | Devnet | `22zoJMtdu4tQc2PzL74ZUT7FrwgB1Udec8DdW4yw4BdG` | Test environment. |
 
 Each deployment publishes its credential and schema pubkeys in deployment-specific documentation. Verifiers who want to confirm anchoring against a specific deployment need the deployment's credential and schema pubkeys as inputs to §4's PDA derivation.
-
-Extol's production credential and schema for mainnet-beta are published at [extol-work/extol-cortex](https://github.com/extol-work/extol-cortex) under `deploy/`.
 
 ## §11 Cost economics
 
@@ -282,8 +282,8 @@ queue notary transactions and use exponential backoff on RPC failures.
 
 ---
 
-## Appendix A: Reference implementation
+## Appendix A: Reference implementations
 
-Extol's production Rust implementation of this binding is at [extol-work/extol-cortex](https://github.com/extol-work/extol-cortex), specifically in `src/worker/` for the individual-attestation notary path and `src/shared/merkle.ts` for the Merkle batching construction. That implementation predates v0.2 and uses the pre-v0.2 PDA derivation; the v0.2 migration is tracked as EXT-247.
+Reference implementations of this specification — portable references for the canonical bytes and SAS binding, and Extol's own operator deployment reference — are listed in [REFERENCE_IMPLEMENTATIONS.md](../REFERENCE_IMPLEMENTATIONS.md) at the repository root.
 
-New implementers should treat the code as a working reference and this specification as the normative source. Where they disagree, the specification wins pending the code being updated.
+Where any Active implementation and this specification disagree, the specification wins and the implementation gets updated to close the gap. Historical implementations may permanently diverge from the current spec — that is what "historical" means.
