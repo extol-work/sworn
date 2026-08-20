@@ -26,6 +26,7 @@ Ranking or scoring functions, role and delegation patterns, KYC or identity assu
 | [bindings/sas.md](./bindings/sas.md) | Normative. Solana Attestation Service binding. Required for Layer 4 conformance. |
 | [bindings/postgres.md](./bindings/postgres.md) | Informative. Postgres binding via [extol-work/sworn-postgres](https://github.com/extol-work/sworn-postgres). Layers 1 and 2 only. |
 | [fixtures/](./fixtures/) | Golden test vectors and cross-implementation runners. |
+| [REFERENCE_IMPLEMENTATIONS.md](./REFERENCE_IMPLEMENTATIONS.md) | Non-normative. Living list of implementations of this specification, with guidance on which to consult for what. |
 | [OPEN_QUESTIONS.md](./OPEN_QUESTIONS.md) | Questions not yet resolved in normative text. |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | How to submit review or an implementation. |
 

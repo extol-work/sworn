@@ -78,6 +78,8 @@ prefix. Reference implementations MUST encode 46 bytes.
 
 **Rationale.** The 46-byte on-wire payload (42 bytes semantic content) is sufficient for a verifier who possesses the attestation off-chain to confirm anchoring: recompute `SHA-256(canonical_bytes)`, look up the corresponding PDA (see §4), read the account, compare the on-chain hash and version, and read the Solana block time as the notarization timestamp. It is insufficient for anyone scanning the SAS program to reconstruct who signed what.
 
+**Reference implementation.** The layout type codes, on-wire encoding, and `CreateSchema` invocation are implemented in [`extol-work/notary/src/sas.rs`](https://github.com/extol-work/notary/blob/main/src/sas.rs). See [REFERENCE_IMPLEMENTATIONS.md](../REFERENCE_IMPLEMENTATIONS.md) for other implementations of this binding.
+
 ### §3.2 Schema description field
 
 The schema's description field (if the SAS deployment supports one) SHOULD contain the string `v0.2 notary anchor: spec_version || attestation_hash || signer_asserted_at`. This is informative metadata; it does not affect verification.
@@ -282,8 +284,8 @@ queue notary transactions and use exponential backoff on RPC failures.
 
 ---
 
-## Appendix A: Reference implementation
+## Appendix A: Reference implementations
 
-Extol's production Rust implementation of this binding is at [extol-work/extol-cortex](https://github.com/extol-work/extol-cortex), specifically in `src/worker/` for the individual-attestation notary path and `src/shared/merkle.ts` for the Merkle batching construction. That implementation predates v0.2 and uses the pre-v0.2 PDA derivation; the v0.2 migration is tracked as EXT-247.
+Reference implementations of this specification — portable references for the canonical bytes and SAS binding, and Extol's own operator deployment reference — are listed in [REFERENCE_IMPLEMENTATIONS.md](../REFERENCE_IMPLEMENTATIONS.md) at the repository root.
 
-New implementers should treat the code as a working reference and this specification as the normative source. Where they disagree, the specification wins pending the code being updated.
+Where any reference implementation and this specification disagree, the specification wins pending the code being updated.
