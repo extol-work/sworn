@@ -2,6 +2,8 @@
 
 **Draft v0.2. Under review.**
 
+Reference command-line implementation: [extol-work/notary](https://github.com/extol-work/notary). Signs, verifies, and anchors attestations to Solana Attestation Service. Consumable from a git clone without depending on Extol infrastructure.
+
 A specification for signed factual claims and their notarization to a public substrate. The notary publishes an opaque hash and a timestamp: enough for any verifier to confirm an attestation existed at a specific time, not enough for anyone to walk the substrate into a directory of who signed what about whom.
 
 ## What this specification defines
@@ -27,6 +29,7 @@ Ranking or scoring functions, role and delegation patterns, KYC or identity assu
 | [bindings/postgres.md](./bindings/postgres.md) | Informative. Postgres binding via [extol-work/sworn-postgres](https://github.com/extol-work/sworn-postgres). Layers 1 and 2 only. |
 | [fixtures/](./fixtures/) | Golden test vectors and cross-implementation runners. |
 | [REFERENCE_IMPLEMENTATIONS.md](./REFERENCE_IMPLEMENTATIONS.md) | Non-normative. Living list of implementations of this specification, with guidance on which to consult for what. |
+| [extol-work/notary](https://github.com/extol-work/notary) | Reference command-line implementation (Rust). Standalone; signs, verifies, and anchors to SAS. External repository. |
 | [OPEN_QUESTIONS.md](./OPEN_QUESTIONS.md) | Questions not yet resolved in normative text. |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | How to submit review or an implementation. |
 
