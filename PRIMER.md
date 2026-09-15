@@ -127,7 +127,7 @@ Verifying attestations requires:
 
 The reference test vectors at §10.4 are the interoperability anchor. If your implementation produces bytes that match vector 1 through vector 5, you produce conforming attestations. If your implementation verifies those five vectors as valid, you verify conforming attestations.
 
-The three implementations currently maintained (Extol's Rust binding of SAS in production, Titania's TypeScript runner, and the [extol-work/notary](https://github.com/extol-work/notary) reference CLI in standalone Rust) all agree byte-for-byte on the reference vectors. The notary CLI is the recommended starting point for adopters who want to exercise the specification without adopting Extol's stack: single binary, `cargo install --git` deployable, exercises Layers 1 through 5 end-to-end against devnet. New implementations that reproduce byte-for-byte agreement with the reference vectors can self-declare Level 2 (Signer) or Level 1 (Verifier) conformance per §10.
+The three implementations currently maintained (Extol's Rust binding of SAS in production, Extol's TypeScript runner, and the [extol-work/notary](https://github.com/extol-work/notary) reference CLI in standalone Rust) all agree byte-for-byte on the reference vectors. The notary CLI is the recommended starting point for adopters who want to exercise the specification without adopting Extol's stack: single binary, `cargo install --git` deployable, exercises Layers 1 through 5 end-to-end against devnet. New implementations that reproduce byte-for-byte agreement with the reference vectors can self-declare Level 2 (Signer) or Level 1 (Verifier) conformance per §10.
 
 ## For reviewers
 

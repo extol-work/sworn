@@ -73,7 +73,7 @@ The Postgres schema is at [extol-work/sworn-postgres](https://github.com/extol-w
 
 The signing binary is at `src/main.rs`. The verification binary is at `src/verify.rs`. Reference vectors are at `fixtures/vectors/`.
 
-Cross-implementation validation runs sworn-postgres's vector emitter against the vectors expected by Titania's TypeScript runner and the standalone Rust runner in the main specification repository's `fixtures/runners/`. All three implementations agree byte-for-byte.
+Cross-implementation validation runs sworn-postgres's vector emitter against the vectors expected by Extol's TypeScript runner and the standalone Rust runner in the main specification repository's `fixtures/runners/`. All three implementations agree byte-for-byte.
 
 ## §6 Relationship to Extol's production deployment
 
